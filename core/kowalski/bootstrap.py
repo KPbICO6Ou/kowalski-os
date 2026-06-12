@@ -33,6 +33,13 @@ def build_default_registry(
     registry.register_all(notes.build_tools(store))
     registry.register_all(reminders.build_tools(scheduler))
 
+    try:
+        import kowindex.api  # noqa: F401
+    except ImportError:
+        pass  # indexer package not installed — files.search_semantic simply absent
+    else:
+        registry.register_all(files.build_semantic_tools(config))
+
     if config.get_bool("KOW_TOOLBOX_FS") and config.allowed_paths:
         try:
             from .tools.toolbox import build_filesystem_tools

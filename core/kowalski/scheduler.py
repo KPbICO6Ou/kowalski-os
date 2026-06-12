@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sqlite3
 from datetime import datetime
 
+from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
 
@@ -38,6 +40,30 @@ class ReminderScheduler:
         if self._scheduler.running:
             self._schedule(reminder_id, text, due_at)
         return reminder_id
+
+    def list_reminders(self, include_done: bool = False) -> list[sqlite3.Row]:
+        query = "SELECT id, text, due_at, delivered, missed FROM reminders"
+        if not include_done:
+            query += " WHERE delivered = 0"
+        query += " ORDER BY due_at"
+        return self._store.conn.execute(query).fetchall()
+
+    def cancel_reminder(self, reminder_id: int) -> str | None:
+        """Cancel a pending reminder. Returns an error message, or None on success."""
+        row = self._store.conn.execute(
+            "SELECT delivered FROM reminders WHERE id = ?", (reminder_id,)
+        ).fetchone()
+        if row is None:
+            return f"no reminder with id {reminder_id}"
+        if row["delivered"]:
+            return f"reminder {reminder_id} was already delivered and cannot be cancelled"
+        try:
+            self._scheduler.remove_job(f"reminder-{reminder_id}")
+        except JobLookupError:
+            pass  # not scheduled (e.g. scheduler not started) — row delete is enough
+        self._store.conn.execute("DELETE FROM reminders WHERE id = ?", (reminder_id,))
+        self._store.conn.commit()
+        return None
 
     def _schedule(self, reminder_id: int, text: str, due_at: datetime) -> None:
         self._scheduler.add_job(

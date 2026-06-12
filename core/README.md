@@ -39,6 +39,9 @@ The socket op `{"op": "conversations"}` returns the recent conversation list.
 | `KOW_TOOLBOX_FS_WRITE` | `0` | unlock fs.* write methods (still confirmed) |
 | `KOW_TOOLBOX_SYSTEM` | `1` | mount read-only `system.*` host-info tools from pydantic-ai-toolbox |
 | `KOW_DB_PATH` | `~/.local/share/kowalski/kowalski.db` | SQLite (journal, notes, reminders) |
+| `KOW_INDEX_DB` | `~/.local/share/kowalski/index.db` | semantic index built by `kow-index` |
+| `KOW_INDEX_PATHS` | — | `:`-separated indexer roots; empty = `KOW_ALLOWED_PATHS` |
+| `KOW_EMBED_MODEL` | `nomic-embed-text` | Ollama embedding model for the semantic index |
 | `KOW_ALLOWED_PATHS` | `~` | path allowlist, `:`-separated |
 | `KOW_AUTO_ALLOW_NETWORK` | `0` | run network tools without confirmation |
 | `KOW_MAX_ITERATIONS` | `8` | max LLM iterations per request |
@@ -53,11 +56,14 @@ The socket op `{"op": "conversations"}` returns the recent conversation list.
 | Tool | Risk | Description |
 |---|---|---|
 | `files.search_by_name` | read | file search: fd → plocate → python walk |
+| `files.search_semantic` | read | natural-language content search over the `kow-index` embedding index (registered only when the `indexer/` package is installed) |
 | `system.*` (9 tools) | read | pydantic-ai-toolbox SystemToolset: cpu_info, memory_info, disk_usage, disk_partitions, uptime, load_avg, top_processes, network_io, battery — read-only host info (psutil) |
 | `system.diagnostics` | read | `wtf audit --format json` wrapper |
 | `apps.open` | write | open an application/file/URL |
 | `notes.create` | write | note in SQLite |
 | `reminders.create` | write | reminder (APScheduler + notification) |
+| `reminders.list` | read | pending reminders ordered by due time; `include_done` adds delivered/missed |
+| `reminders.cancel` | write | cancel a pending reminder: removes the scheduled job and the row |
 | `fs.*` (13 tools) | read/write/destructive | pydantic-ai-toolbox FilesystemToolset: read_file, grep, glob, list_dir, stat (read); write/append/copy/move/mkdir (write); delete_* (destructive) — sandboxed at the first allowed path |
 
 Risk levels: read → executes; write → allowed inside the allowlist, otherwise

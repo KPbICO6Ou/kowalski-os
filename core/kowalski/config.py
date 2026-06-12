@@ -27,6 +27,12 @@ DEFAULTS: dict[str, str] = {
     # (qwen2.5 at default temp occasionally emits unparseable <tool_call> blocks)
     "KOW_TEMPERATURE": "0.2",
     "KOW_DB_PATH": "~/.local/share/kowalski/kowalski.db",
+    # semantic index database built by kow-index (the indexer/ package)
+    "KOW_INDEX_DB": "~/.local/share/kowalski/index.db",
+    # ':'-separated roots for the indexer; empty = fall back to KOW_ALLOWED_PATHS
+    "KOW_INDEX_PATHS": "",
+    # Ollama embedding model used by the semantic index
+    "KOW_EMBED_MODEL": "nomic-embed-text",
     "KOW_ALLOWED_PATHS": "~",
     "KOW_AUTO_ALLOW_NETWORK": "0",
     "KOW_MAX_ITERATIONS": "8",

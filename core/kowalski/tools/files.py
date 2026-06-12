@@ -1,4 +1,5 @@
-"""files.* tools: search by name. Backend chain: fd -> plocate -> pure-python walk."""
+"""files.* tools: search by name (fd -> plocate -> pure-python walk) and by meaning
+(semantic search over the kow-index embedding database)."""
 
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from ..config import Config
 from .base import RiskLevel, ToolDef, ToolResult
 
 WALK_TIME_BUDGET = 10.0  # seconds, hard cap for the pure-python fallback
@@ -94,6 +96,87 @@ def _python_walk(
                 if len(results) >= limit:
                     return results
     return results
+
+
+class SemanticSearchArgs(BaseModel):
+    query: str = Field(
+        min_length=2,
+        description="Natural-language query; matches file content by meaning, not exact words",
+    )
+    limit: int = Field(default=8, ge=1, le=25)
+
+
+def build_semantic_tools(config: Config) -> list[ToolDef]:
+    async def files_search_semantic(args: SemanticSearchArgs) -> ToolResult:
+        try:
+            from kowindex.api import SemanticIndex
+        except ImportError:
+            return ToolResult(
+                ok=False, content="semantic index not installed — pip install -e indexer"
+            )
+
+        db_path = config.get_path("KOW_INDEX_DB")
+        if not db_path.exists():
+            return ToolResult(
+                ok=True,
+                content=(
+                    "The semantic index is empty — nothing has been indexed yet. "
+                    "Ask the user to run `kow-index index` first."
+                ),
+                data=[],
+            )
+        index = SemanticIndex(
+            db_path,
+            ollama_host=config.get("OLLAMA_HOST"),
+            model=config.get("KOW_EMBED_MODEL"),
+        )
+        try:
+            if not index.stats().get("chunks", 0):
+                return ToolResult(
+                    ok=True,
+                    content=(
+                        "The semantic index is empty — nothing has been indexed yet. "
+                        "Ask the user to run `kow-index index` first."
+                    ),
+                    data=[],
+                )
+            hits = index.search(args.query, args.limit)
+        except Exception as exc:  # e.g. Ollama down, corrupt index
+            return ToolResult(ok=False, content=f"semantic search failed: {exc}")
+
+        if not hits:
+            return ToolResult(ok=True, content="No semantic matches found.", data=[])
+        lines = [f"score={hit.score:.2f}  {hit.path}  — {hit.snippet}" for hit in hits]
+        data = [
+            {
+                "path": hit.path,
+                "score": hit.score,
+                "snippet": hit.snippet,
+                "chunk_index": hit.chunk_index,
+                "mtime": hit.mtime,
+            }
+            for hit in hits
+        ]
+        listing = "\n".join(lines)
+        return ToolResult(
+            ok=True,
+            content=f"Top {len(hits)} semantic matches (best first):\n{listing}",
+            data=data,
+        )
+
+    return [
+        ToolDef(
+            name="files.search_semantic",
+            description=(
+                "Search file contents by meaning: a natural-language query is matched "
+                "against the semantic (embedding) index built by kow-index. Use it when "
+                "the exact file name or wording is unknown."
+            ),
+            args_model=SemanticSearchArgs,
+            risk=RiskLevel.READ,
+            handler=files_search_semantic,
+        )
+    ]
 
 
 def build_tools(allowed_paths: list[Path]) -> list[ToolDef]:
