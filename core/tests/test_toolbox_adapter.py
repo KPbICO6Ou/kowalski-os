@@ -94,3 +94,23 @@ async def test_fs_delete_requires_confirmation(tmp_path: Path, deny_registry):
     assert not result.ok
     assert "Denied by user" in result.content
     assert (tmp_path / "victim.txt").exists()  # nothing was deleted
+
+
+def test_all_default_registry_schemas_build(tmp_path, config, tmp_store):
+    """Every mounted tool must produce a valid JSON schema — catches
+    forward-ref annotations (e.g. Literal under `from __future__ import
+    annotations` in toolbox modules) that only blow up at schema time."""
+    from kowalski.bootstrap import build_default_registry
+    from kowalski.config import DEFAULTS, Config
+    from kowalski.policy import AutoDeny
+    from kowalski.scheduler import ReminderScheduler
+
+    full_config = Config({**DEFAULTS, **config.values})
+    registry = build_default_registry(
+        full_config, tmp_store, ReminderScheduler(tmp_store), AutoDeny()
+    )
+    schemas = registry.schemas_for_ollama()
+    names = {s["function"]["name"] for s in schemas}
+    assert "system.top_processes" in names
+    for schema in schemas:
+        assert schema["function"]["parameters"]["type"] == "object"

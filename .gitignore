@@ -23,6 +23,9 @@ answers.yaml
 # macOS
 .DS_Store
 
+# Claude Code session artifacts (agent worktrees etc.)
+.claude/
+
 # Editors
 .idea/
 .vscode/

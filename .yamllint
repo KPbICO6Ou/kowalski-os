@@ -15,5 +15,6 @@ rules:
 ignore: |
   .venv/
   .github/
+  .claude/
   # cloud-init: '#cloud-config' shebang-comment and a long sha-512 hash line
   provision/autoinstall/autoinstall.yaml

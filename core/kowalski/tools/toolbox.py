@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import typing
 from typing import Any
 
 from pydantic import create_model
@@ -36,11 +37,16 @@ def classify_risk(method_name: str) -> RiskLevel:
 
 
 def _args_model_from_signature(name: str, fn) -> type:
+    # Toolbox modules use `from __future__ import annotations`, so signature
+    # annotations are strings; get_type_hints() evaluates them in the source
+    # module's namespace (where Literal etc. are imported). A string passed to
+    # create_model would become an unresolvable forward ref instead.
+    hints = typing.get_type_hints(fn)
     fields: dict[str, Any] = {}
     for param_name, param in inspect.signature(fn).parameters.items():
         if param_name in ("self", "ctx"):
             continue
-        annotation = param.annotation if param.annotation is not inspect.Parameter.empty else str
+        annotation = hints.get(param_name, str)
         default = param.default if param.default is not inspect.Parameter.empty else ...
         fields[param_name] = (annotation, default)
     return create_model(f"{name}_Args", **fields)
