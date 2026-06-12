@@ -19,6 +19,7 @@ jobs:
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install -r requirements-dev.txt
           .venv/bin/pip install -e "core[api,pydantic-ai]" -e setup
+          .venv/bin/pip install -e ui
           .venv/bin/pip install pytest-asyncio httpx
           # PyPI still has 0.0.1 — pin the 0.0.2 git tag until it is published
           .venv/bin/pip install --force-reinstall --no-deps \

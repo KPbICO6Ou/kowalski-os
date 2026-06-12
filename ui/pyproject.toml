@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kowalski-ui"
+version = "0.1.0"
+description = "Kowalski OS omnibox UI: GTK3 launcher window and CLI client for kow-core"
+requires-python = ">=3.12"
+license = {text = "Apache-2.0"}
+dependencies = [
+    "kowalski",
+]
+
+[project.scripts]
+kow-omni = "kowui.app:main"
+
+[tool.setuptools.packages.find]
+include = ["kowui*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
