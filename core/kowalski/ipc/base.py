@@ -53,11 +53,19 @@ class PendingQueueConfirmation(ConfirmationProvider):
             self._pending.pop(request.id, None)
 
     def resolve(self, request_id: str, approved: bool) -> bool:
+        """Thread-safe: transports may call this from non-asyncio threads
+        (e.g. the GLib loop of the D-Bus service), so the result is handed
+        to the loop the future was created on in confirm()."""
         future = self._pending.get(request_id)
-        if future and not future.done():
-            future.set_result(approved)
-            return True
-        return False
+        if future is None or future.done():
+            return False
+
+        def set_result() -> None:
+            if not future.done():
+                future.set_result(approved)
+
+        future.get_loop().call_soon_threadsafe(set_result)
+        return True
 
 
 class AgentService:
