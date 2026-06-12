@@ -1,4 +1,4 @@
-"""SQLite store: schema migrations for journal, notes, reminders."""
+"""SQLite store: schema migrations for journal, notes, reminders, conversations."""
 
 from __future__ import annotations
 
@@ -34,6 +34,20 @@ CREATE TABLE IF NOT EXISTS reminders (
     delivered INTEGER NOT NULL DEFAULT 0,
     missed INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS conversations (
+    id TEXT PRIMARY KEY,
+    created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_ts TEXT,
+    title TEXT
+);
+CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id TEXT NOT NULL,
+    ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+    content TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
 """
 
 

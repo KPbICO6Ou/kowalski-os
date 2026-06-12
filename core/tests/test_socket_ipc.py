@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from kowalski.agent.llm import ToolCall
 from kowalski.agent.loop import AgentLoop
+from kowalski.conversations import ConversationStore
 from kowalski.ipc.base import AgentService, PendingQueueConfirmation
 from kowalski.ipc.socket_service import SocketIpcServer
 from kowalski.journal import ActionJournal
@@ -63,6 +64,31 @@ async def ipc(tmp_path: Path, tmp_store, short_sock_path):
     task = asyncio.create_task(server.serve())
     await asyncio.sleep(0.05)
     yield server
+    task.cancel()
+    await server.shutdown()
+
+
+@pytest.fixture
+async def conv_ipc(tmp_path: Path, tmp_store, short_sock_path):
+    """Socket server with conversation persistence and a text-only FakeLLM."""
+    confirmations = PendingQueueConfirmation(timeout=5.0)
+    registry = ToolRegistry(
+        policy=SecurityPolicy(allowed_paths=[tmp_path]),
+        journal=ActionJournal(tmp_store),
+        confirmer=confirmations,
+        tool_timeout=5.0,
+    )
+    llm = FakeLLM(["Paris is the capital.", "About 2.1 million people."])
+    service = AgentService(
+        lambda: AgentLoop(llm, registry),
+        registry,
+        confirmations,
+        conversations=ConversationStore(tmp_store),
+    )
+    server = SocketIpcServer(short_sock_path, service)
+    task = asyncio.create_task(server.serve())
+    await asyncio.sleep(0.05)
+    yield server, llm
     task.cancel()
     await server.shutdown()
 
@@ -124,3 +150,33 @@ async def test_ask_with_confirm_roundtrip(ipc: SocketIpcServer):
     assert kinds[-1] == "DoneEvent"
     tool_result = next(e for e in events if e.get("event") == "ToolResultEvent")
     assert tool_result["ok"] is True
+
+
+async def test_two_turn_conversation_over_socket(conv_ipc):
+    """A second ask with the same conversation_id sees the first answer
+    in the LLM messages; the conversations op lists the conversation."""
+    server, llm = conv_ipc
+
+    first = await send_recv_lines(
+        server.socket_path,
+        {"op": "ask", "prompt": "What is the capital of France?", "conversation_id": "conv-1"},
+    )
+    assert first[-1]["event"] == "DoneEvent"
+    assert "Paris" in first[-1]["answer"]
+
+    second = await send_recv_lines(
+        server.socket_path,
+        {"op": "ask", "prompt": "How many people live there?", "conversation_id": "conv-1"},
+    )
+    assert second[-1]["event"] == "DoneEvent"
+
+    messages = llm.calls[1]
+    assert [m["role"] for m in messages] == ["system", "user", "assistant", "user"]
+    assert "Paris is the capital." in messages[2]["content"]
+
+    listing = (await send_recv_lines(server.socket_path, {"op": "conversations"}, 1))[0]
+    assert len(listing["conversations"]) == 1
+    conv = listing["conversations"][0]
+    assert conv["id"] == "conv-1"
+    assert conv["title"] == "What is the capital of France?"
+    assert conv["messages"] == 4

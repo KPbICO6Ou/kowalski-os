@@ -24,6 +24,13 @@ def main(argv: list[str] | None = None) -> int:
     ask.add_argument("--model", help="override OLLAMA_MODEL")
     ask.add_argument("--yes", action="store_true", help="auto-approve confirmations (not destructive)")
     ask.add_argument("--json", action="store_true", help="emit raw events as JSON lines")
+    ask.add_argument("-c", "--conversation", help="conversation ID to continue")
+    ask.add_argument(
+        "--continue",
+        dest="continue_",
+        action="store_true",
+        help="continue the most recent conversation",
+    )
 
     serve = sub.add_parser("serve", help="run the kow-core daemon")
     serve.add_argument("--api", action="store_true", help="enable the debug REST API")
@@ -68,21 +75,36 @@ def _build_runtime(confirmer):
 
 
 async def cmd_ask(args) -> int:
+    import uuid
+
     from .agent.events import DoneEvent, ErrorEvent, TokenEvent, ToolCallEvent, ToolResultEvent
     from .agent.loop import AgentLoop
     from .bootstrap import build_llm
+    from .conversations import ConversationStore, run_turn
     from .policy import AutoConfirm, InteractiveCliConfirmation
 
     confirmer = AutoConfirm() if args.yes else InteractiveCliConfirmation()
     config, store, scheduler, registry = _build_runtime(confirmer)
-    scheduler.start()
+    conversations = ConversationStore(store)
 
+    conversation_id = args.conversation
+    if args.continue_:
+        conversation_id = conversations.last_conversation_id()
+        if conversation_id is None:
+            print("no previous conversation to continue", file=sys.stderr)
+            store.close()
+            return 1
+    new_conversation = conversation_id is None
+    if new_conversation:
+        conversation_id = uuid.uuid4().hex
+
+    scheduler.start()
     llm = build_llm(config, model_override=args.model or "")
     loop = AgentLoop(llm, registry, max_iterations=config.get_int("KOW_MAX_ITERATIONS"))
 
     exit_code = 0
     try:
-        async for event in loop.run(args.prompt):
+        async for event in run_turn(loop, args.prompt, conversation_id, conversations):
             if args.json:
                 print(json.dumps(event.to_dict(), ensure_ascii=False), flush=True)
                 continue
@@ -98,6 +120,11 @@ async def cmd_ask(args) -> int:
             elif isinstance(event, ErrorEvent):
                 print(f"\nerror: {event.message}", file=sys.stderr)
                 exit_code = 1
+        if not args.json and new_conversation:
+            print(
+                f"{DIM}(conversation: {conversation_id}"
+                f' — continue with: kow ask --continue "..."){RESET}'
+            )
     finally:
         scheduler.shutdown()
         store.close()

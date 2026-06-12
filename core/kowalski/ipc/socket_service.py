@@ -5,6 +5,7 @@ Requests:
   {"op": "confirm", "request_id": "...", "approved": true}   -> {"ok": true}
   {"op": "tools"}                                            -> {"tools": [...]}
   {"op": "status"}                                           -> {"version": ..., "tools": N}
+  {"op": "conversations"}                                    -> {"conversations": [...]}
 
 Events are AgentEvent.to_dict() JSON lines. ConfirmRequestEvents raised while a
 tool awaits confirmation are interleaved into the same stream."""
@@ -79,6 +80,8 @@ class SocketIpcServer(IpcServer):
             await self._send(writer, {"tools": self.service.list_tools()})
         elif op == "status":
             await self._send(writer, self.service.status())
+        elif op == "conversations":
+            await self._send(writer, {"conversations": self.service.list_conversations()})
         else:
             await self._send(writer, {"error": f"unknown op: {op}"})
 

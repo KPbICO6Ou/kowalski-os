@@ -13,6 +13,7 @@ from typing import Any
 
 from ..agent.events import AgentEvent, ConfirmRequestEvent
 from ..agent.loop import AgentLoop
+from ..conversations import ConversationStore, run_turn
 from ..policy import ConfirmationProvider, ConfirmRequest
 from ..tools.registry import ToolRegistry
 
@@ -76,15 +77,17 @@ class AgentService:
         loop_factory,  # () -> AgentLoop
         registry: ToolRegistry,
         confirmations: PendingQueueConfirmation,
+        conversations: ConversationStore | None = None,
     ):
         self._loop_factory = loop_factory
         self.registry = registry
         self.confirmations = confirmations
+        self.conversations = conversations
 
     async def ask(self, prompt: str, conversation_id: str | None = None) -> AsyncIterator[AgentEvent]:
         agent_loop: AgentLoop = self._loop_factory()
         conversation_id = conversation_id or uuid.uuid4().hex
-        async for event in agent_loop.run(prompt, conversation_id=conversation_id):
+        async for event in run_turn(agent_loop, prompt, conversation_id, self.conversations):
             yield event
 
     def confirm(self, request_id: str, approved: bool) -> bool:
@@ -100,6 +103,11 @@ class AgentService:
             }
             for t in self.registry.list()
         ]
+
+    def list_conversations(self) -> list[dict[str, Any]]:
+        if self.conversations is None:
+            return []
+        return self.conversations.list_recent()
 
     def status(self) -> dict[str, Any]:
         from .. import __version__

@@ -9,6 +9,7 @@ import signal
 from .agent.loop import AgentLoop
 from .bootstrap import build_default_registry, build_llm
 from .config import Config
+from .conversations import ConversationStore
 from .ipc import make_ipc_server
 from .ipc.base import AgentService, PendingQueueConfirmation
 from .scheduler import ReminderScheduler
@@ -33,7 +34,8 @@ async def run_daemon(api: bool = False) -> int:
     def loop_factory() -> AgentLoop:
         return AgentLoop(llm, registry, max_iterations=config.get_int("KOW_MAX_ITERATIONS"))
 
-    service = AgentService(loop_factory, registry, confirmations)
+    conversations = ConversationStore(store)
+    service = AgentService(loop_factory, registry, confirmations, conversations=conversations)
     ipc_server = make_ipc_server(config, service)
 
     scheduler.start()

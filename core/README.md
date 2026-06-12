@@ -15,10 +15,16 @@ ollama pull qwen2.5:14b        # or 7b on smaller hardware
 ```bash
 kow ask "find PDFs from the last week"     # one-shot, no daemon
 kow ask --yes --json "..."                 # auto-confirm + JSON event stream
+kow ask --continue "and the largest one?"  # follow-up in the most recent conversation
+kow ask -c <ID> "..."                      # follow-up in a specific conversation
 kow serve [--api]                          # daemon: socket/D-Bus (+ REST on 127.0.0.1:8377)
 kow tools list [--schemas]
 kow journal tail [-n 50]
 ```
+
+Conversations persist final user/assistant turns in SQLite; follow-ups (same
+`conversation_id` over IPC, or `-c`/`--continue` in the CLI) see prior turns.
+The socket op `{"op": "conversations"}` returns the recent conversation list.
 
 ## Config `~/.config/kowalski/kowalski.conf` (KEY=VALUE, env overrides file)
 
