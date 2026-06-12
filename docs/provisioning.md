@@ -34,6 +34,25 @@ make test-provision        # полный: cloud-init schema + 2×playbook (chan
 make test-provision-fast   # без desktop-пакетов (~быстрее на порядок)
 ```
 
+## Архитектуры
+
+Поддерживаются **amd64** и **arm64** — архитектура определяется автоматически
+(`kowalski_deb_arch` / `cuda_repo_arch` в `group_vars/all.yml`):
+
+| Компонент | amd64 | arm64 |
+|---|---|---|
+| Docker repo | `arch=amd64` | `arch=arm64` |
+| Ollama | `ollama-linux-amd64.tgz` | `ollama-linux-arm64.tgz` |
+| CUDA repo | `ubuntu2404/x86_64` | `ubuntu2404/sbsa` (Server Base System Arch) |
+| nvidia-container-toolkit | `deb/amd64` | `deb/arm64` |
+| Драйвер | `nvidia-driver-*-server` | `nvidia-driver-*-server` (SBSA) |
+
+⚠ **Jetson (Orin/Xavier) не покрывается этим путём**: там драйвер входит в L4T/JetPack
+и ставится прошивкой, CUDA — из JetPack-репо. Для Jetson пропускайте роль
+`nvidia` (`--skip-tags nvidia`) и ставьте JetPack-стек вручную; роли docker/ollama/desktop
+работают как есть. Smoke-тест в Docker на Apple Silicon выполняется в arm64-контейнере,
+то есть arm64-ветки ролей проверяются локально каждым прогоном.
+
 ## Отложено до появления железа
 
 - реальный прогон роли `nvidia` и warm-pull моделей Ollama;

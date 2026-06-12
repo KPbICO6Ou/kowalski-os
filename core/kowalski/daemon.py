@@ -6,9 +6,8 @@ import asyncio
 import logging
 import signal
 
-from .agent.llm import OllamaLLM
 from .agent.loop import AgentLoop
-from .bootstrap import build_default_registry
+from .bootstrap import build_default_registry, build_llm
 from .config import Config
 from .ipc import make_ipc_server
 from .ipc.base import AgentService, PendingQueueConfirmation
@@ -29,7 +28,7 @@ async def run_daemon(api: bool = False) -> int:
     )
     registry = build_default_registry(config, store, scheduler, confirmations)
 
-    llm = OllamaLLM(host=config.get("OLLAMA_HOST"), model=config.get("OLLAMA_MODEL"))
+    llm = build_llm(config)
 
     def loop_factory() -> AgentLoop:
         return AgentLoop(llm, registry, max_iterations=config.get_int("KOW_MAX_ITERATIONS"))

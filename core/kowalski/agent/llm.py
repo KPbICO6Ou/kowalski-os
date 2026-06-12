@@ -27,17 +27,22 @@ class LLMClient(Protocol):
 
 
 class OllamaLLM:
-    def __init__(self, host: str, model: str):
+    def __init__(self, host: str, model: str, temperature: float = 0.2):
         import ollama
 
         self._client = ollama.AsyncClient(host=host)
         self.model = model
+        self.temperature = temperature
 
     async def chat(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> AsyncIterator[ChatChunk]:
         stream = await self._client.chat(
-            model=self.model, messages=messages, tools=tools or None, stream=True
+            model=self.model,
+            messages=messages,
+            tools=tools or None,
+            stream=True,
+            options={"temperature": self.temperature},
         )
         async for part in stream:
             message = part.get("message", {}) if isinstance(part, dict) else part.message

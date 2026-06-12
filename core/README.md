@@ -26,6 +26,11 @@ kow journal tail [-n 50]
 |---|---|---|
 | `OLLAMA_HOST` | `http://127.0.0.1:11434` | адрес Ollama |
 | `OLLAMA_MODEL` | `qwen2.5:7b` | модель с tool calling |
+| `KOW_LLM` | `ollama` | транспорт: `ollama` или `pydantic-ai` |
+| `KOW_PAI_MODEL` | — | модель pydantic-ai с провайдером, напр. `anthropic:claude-sonnet-4-6` |
+| `KOW_TEMPERATURE` | `0.2` | низкая темп. = стабильный tool-call у локальных моделей |
+| `KOW_TOOLBOX_FS` | `1` | монтировать `fs.*` из pydantic-ai-toolbox |
+| `KOW_TOOLBOX_FS_WRITE` | `0` | разрешить write-методы fs.* (всё равно через confirm) |
 | `KOW_DB_PATH` | `~/.local/share/kowalski/kowalski.db` | SQLite (журнал, заметки, напоминания) |
 | `KOW_ALLOWED_PATHS` | `~` | allowlist путей через `:` |
 | `KOW_AUTO_ALLOW_NETWORK` | `0` | network-tools без подтверждения |
@@ -46,6 +51,7 @@ kow journal tail [-n 50]
 | `apps.open` | write | открыть приложение/файл/URL |
 | `notes.create` | write | заметка в SQLite |
 | `reminders.create` | write | напоминание (APScheduler + уведомление) |
+| `fs.*` (13 шт.) | read/write/destructive | pydantic-ai-toolbox FilesystemToolset: read_file, grep, glob, list_dir, stat (read); write/append/copy/move/mkdir (write); delete_* (destructive) — песочница в первом allowed-пути |
 
 Уровни риска: read → выполняется; write → разрешён внутри allowlist, иначе
 подтверждение; destructive → всегда подтверждение; network → подтверждение

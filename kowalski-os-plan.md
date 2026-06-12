@@ -67,7 +67,8 @@
 | Элемент | Стек | Готовое/своё |
 |---|---|---|
 | Демон | Python 3.12, asyncio, systemd user unit (`kow-core.service`) | **своё** |
-| LLM-клиент | `ollama` python lib; модель с tool calling: **qwen2.5:14b/32b** или llama3.1 (зависит от VRAM) | готовое |
+| LLM-клиент | два бэкенда (`KOW_LLM`): `ollama` python lib ИЛИ **pydantic-ai** (`pydantic_ai.direct`) — последний открывает любые провайдеры (anthropic/openai/…) через `KOW_PAI_MODEL`; модель с tool calling: **qwen2.5:14b/32b** | готовое |
+| Готовые toolsets | **wachawo/pydantic-ai-toolbox** — FilesystemToolset смонтирован как `fs.*` (read_file/grep/glob/…) через адаптер с политиками/журналом; SQL/Memory/RAG toolsets — по мере надобности | готовое (своё же) |
 | Tool-протокол | **MCP (Model Context Protocol)** — каждый модуль инструментов = MCP-сервер. Это даёт совместимость со сторонними MCP-серверами из коробки | готовый протокол, серверы свои |
 | IPC с GUI | **D-Bus** (`dasbus`) — нативно для Linux-десктопа, события, активация по запросу | готовое |
 | REST (опционально) | FastAPI на 127.0.0.1 — для отладки и внешних клиентов (твой membook-паттерн) | своё |
@@ -299,9 +300,33 @@ kowalski/                  # монорепо в org kowalski-os
 2. `GET /api/health` уже отдаёт engine/pool — достаточно; опционально добавить `device`.
 3. Опционально: параметр `format=wav|mp3` в API, чтобы kow-voice не перекодировал на клиенте.
 
+### pydantic-ai-toolbox (слой готовых toolsets для агента)
+
+1. **SystemToolset** (новый, PR) — системные данные через psutil: cpu/memory/disk/uptime/
+   load/processes; extra `pip install pydantic-ai-toolbox[system]`. Нужен kow-core
+   (заменит часть самописного system.py) и полезен любому pydantic-ai агенту.
+2. **Релиз на PyPI** — опубликованная 0.0.1 отстаёт от main (нет fs.grep/move/copy_*);
+   нужен tag+release, чтобы зависеть по версии, а не по git.
+3. Дальше по мере надобности: MemoryToolset для M8 (память агента), RAGToolset для M4
+   (семантический поиск), SQLToolset для системных БД.
+
+### Интеграция pydantic-ai в kow-core (стратегия)
+
+- **Сейчас (сделано):** транспорт `KOW_LLM=pydantic-ai` — весь LLM-трафик через
+  `pydantic_ai.direct.model_request_stream`; Ollama через OpenAI-совместимый `/v1`,
+  любой облачный провайдер через `KOW_PAI_MODEL`. Свой агентный цикл, политики и
+  журнал не тронуты. Toolbox-toolsets монтируются адаптером (`tools/toolbox.py`)
+  сквозь общий choke point (валидация → политика → подтверждение → журнал).
+- **Известная особенность:** локальные модели при высокой температуре ломают разметку
+  tool-call в `/v1`-пути → `KOW_TEMPERATURE=0.2` по умолчанию.
+- **Позже (фаза 2+):** оценить полную миграцию цикла на `pydantic_ai.Agent`
+  (toolsets нативно, retries/validation из коробки) — при условии, что approval-flow
+  (наши CONFIRM/DENY политики) выразим через WrapperToolset/deferred tools без потери
+  журнала; иначе остаёмся на direct-слое.
+
 ### Принцип
 
-Все доработки — обратносовместимые и полезные репозиториям сами по себе (plugin API и `wtf ai` усиливают wtftools как продукт, `language` и `X-Elapsed` нужны любому клиенту). Kowalski OS не форкает, а использует их как upstream-зависимости: `pip install wtftools[ai]`.
+Все доработки — обратносовместимые и полезные репозиториям сами по себе (plugin API и `wtf ai` усиливают wtftools как продукт, `language` и `X-Elapsed` нужны любому клиенту, SystemToolset — любому pydantic-ai агенту). Kowalski OS не форкает, а использует их как upstream-зависимости: `pip install wtftools[ai] pydantic-ai-toolbox[system]`.
 
 ## 8. Главные риски
 

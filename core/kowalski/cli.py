@@ -69,16 +69,15 @@ def _build_runtime(confirmer):
 
 async def cmd_ask(args) -> int:
     from .agent.events import DoneEvent, ErrorEvent, TokenEvent, ToolCallEvent, ToolResultEvent
-    from .agent.llm import OllamaLLM
     from .agent.loop import AgentLoop
+    from .bootstrap import build_llm
     from .policy import AutoConfirm, InteractiveCliConfirmation
 
     confirmer = AutoConfirm() if args.yes else InteractiveCliConfirmation()
     config, store, scheduler, registry = _build_runtime(confirmer)
     scheduler.start()
 
-    model = args.model or config.get("OLLAMA_MODEL")
-    llm = OllamaLLM(host=config.get("OLLAMA_HOST"), model=model)
+    llm = build_llm(config, model_override=args.model or "")
     loop = AgentLoop(llm, registry, max_iterations=config.get_int("KOW_MAX_ITERATIONS"))
 
     exit_code = 0

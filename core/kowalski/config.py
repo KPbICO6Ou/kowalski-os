@@ -11,6 +11,19 @@ DEFAULT_CONFIG_PATH = Path("~/.config/kowalski/kowalski.conf").expanduser()
 DEFAULTS: dict[str, str] = {
     "OLLAMA_HOST": "http://127.0.0.1:11434",
     "OLLAMA_MODEL": "qwen2.5:7b",
+    # LLM transport: "ollama" (native client) or "pydantic-ai" (any provider
+    # via pydantic-ai; defaults to the same Ollama host through /v1)
+    "KOW_LLM": "ollama",
+    # provider-prefixed pydantic-ai model, e.g. "anthropic:claude-sonnet-4-6";
+    # empty = wrap OLLAMA_HOST/OLLAMA_MODEL
+    "KOW_PAI_MODEL": "",
+    # pydantic-ai-toolbox: mount FilesystemToolset as fs.* tools (sandbox = first
+    # allowed path); KOW_TOOLBOX_FS_WRITE=1 unlocks write methods (still confirmed)
+    "KOW_TOOLBOX_FS": "1",
+    "KOW_TOOLBOX_FS_WRITE": "0",
+    # Low temperature keeps local models' tool-call markup well-formed
+    # (qwen2.5 at default temp occasionally emits unparseable <tool_call> blocks)
+    "KOW_TEMPERATURE": "0.2",
     "KOW_DB_PATH": "~/.local/share/kowalski/kowalski.db",
     "KOW_ALLOWED_PATHS": "~",
     "KOW_AUTO_ALLOW_NETWORK": "0",

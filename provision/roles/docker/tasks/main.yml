@@ -18,14 +18,10 @@
     dest: /etc/apt/keyrings/docker.asc
     mode: "0644"
 
-- name: Determine APT architecture
-  ansible.builtin.set_fact:
-    docker_apt_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
-
 - name: Add Docker repository
   ansible.builtin.apt_repository:
     repo: >-
-      deb [arch={{ docker_apt_arch }} signed-by=/etc/apt/keyrings/docker.asc]
+      deb [arch={{ kowalski_deb_arch }} signed-by=/etc/apt/keyrings/docker.asc]
       https://download.docker.com/linux/ubuntu noble stable
     filename: docker
     state: present
@@ -68,7 +64,7 @@
       ansible.builtin.apt_repository:
         repo: >-
           deb [signed-by=/etc/apt/keyrings/nvidia-container-toolkit.asc]
-          https://nvidia.github.io/libnvidia-container/stable/deb/amd64 /
+          https://nvidia.github.io/libnvidia-container/stable/deb/{{ kowalski_deb_arch }} /
         filename: nvidia-container-toolkit
         state: present
 

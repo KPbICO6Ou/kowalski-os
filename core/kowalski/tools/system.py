@@ -1,4 +1,7 @@
-"""system.* tools: host info and diagnostics."""
+"""system.* tools: host info and diagnostics.
+
+NOTE: планируется замена на SystemToolset из pydantic-ai-toolbox, когда тот
+появится в upstream (см. roadmap, раздел pydantic-ai-toolbox)."""
 
 from __future__ import annotations
 
@@ -40,10 +43,12 @@ async def system_info(args: SystemInfoArgs) -> ToolResult:
         }
     if "disk" in args.sections:
         disk = psutil.disk_usage("/")
+        # psutil's `percent` is misleading on macOS (APFS snapshot volume) —
+        # report an unambiguous used_percent computed from total/free instead
         info["disk"] = {
             "total_gb": round(disk.total / 2**30, 1),
             "free_gb": round(disk.free / 2**30, 1),
-            "percent": disk.percent,
+            "used_percent": round((disk.total - disk.free) / disk.total * 100, 1),
         }
     if "battery" in args.sections:
         battery = psutil.sensors_battery()
