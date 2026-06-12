@@ -1,0 +1,40 @@
+---
+# ~1.6 GB download — pointless inside the smoke-test container,
+# where the binary is never executed.
+- name: Download and unpack Ollama
+  ansible.builtin.unarchive:
+    src: "{{ ollama_tarball_url }}"
+    dest: /usr/local
+    remote_src: true
+    creates: /usr/local/bin/ollama
+  when: not kowalski_in_container
+
+- name: Create ollama system user
+  ansible.builtin.user:
+    name: ollama
+    system: true
+    shell: /usr/sbin/nologin
+    home: /var/lib/ollama
+    create_home: true
+
+- name: Deploy ollama systemd unit
+  ansible.builtin.template:
+    src: ollama.service.j2
+    dest: /etc/systemd/system/ollama.service
+    mode: "0644"
+  notify: Restart ollama
+
+- name: Enable ollama service
+  ansible.builtin.systemd_service:
+    name: ollama
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: not kowalski_in_container
+
+- name: Pull Ollama models
+  ansible.builtin.command: /usr/local/bin/ollama pull {{ item }}
+  loop: "{{ ollama_models }}"
+  register: ollama_pull
+  changed_when: "'pulling' in ollama_pull.stderr | default('')"
+  when: not kowalski_in_container

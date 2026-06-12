@@ -1,0 +1,85 @@
+---
+- name: Install prerequisites
+  ansible.builtin.apt:
+    name: [ca-certificates, gnupg]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create keyrings directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Download Docker GPG key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+
+- name: Determine APT architecture
+  ansible.builtin.set_fact:
+    docker_apt_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+
+- name: Add Docker repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch={{ docker_apt_arch }} signed-by=/etc/apt/keyrings/docker.asc]
+      https://download.docker.com/linux/ubuntu noble stable
+    filename: docker
+    state: present
+
+- name: Install Docker packages
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+
+- name: Add user to docker group
+  ansible.builtin.user:
+    name: "{{ kowalski_user }}"
+    groups: docker
+    append: true
+  when: not kowalski_in_container
+
+- name: Enable Docker service
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+  when: not kowalski_in_container
+
+- name: Install NVIDIA container toolkit
+  tags: [gpu]
+  when: not kowalski_in_container
+  block:
+    - name: Download NVIDIA container toolkit GPG key
+      ansible.builtin.get_url:
+        url: https://nvidia.github.io/libnvidia-container/gpgkey
+        dest: /etc/apt/keyrings/nvidia-container-toolkit.asc
+        mode: "0644"
+
+    - name: Add NVIDIA container toolkit repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [signed-by=/etc/apt/keyrings/nvidia-container-toolkit.asc]
+          https://nvidia.github.io/libnvidia-container/stable/deb/amd64 /
+        filename: nvidia-container-toolkit
+        state: present
+
+    - name: Install nvidia-container-toolkit
+      ansible.builtin.apt:
+        name: nvidia-container-toolkit
+        state: present
+        update_cache: true
+
+    - name: Configure Docker runtime for NVIDIA
+      ansible.builtin.command: nvidia-ctk runtime configure --runtime=docker
+      args:
+        creates: /etc/docker/daemon.json
+      notify: Restart docker

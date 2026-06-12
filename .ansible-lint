@@ -1,0 +1,9 @@
+profile: moderate
+
+exclude_paths:
+  - .venv/
+  - provision/autoinstall/   # cloud-init, not Ansible
+  - provision/test/
+
+skip_list:
+  - galaxy[no-changelog]

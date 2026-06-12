@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Ansible
+*.retry
+.ansible/
+provision/inventories/remote/hosts.yml
+
+# kow-setup: real answers may contain tokens
+answers.yaml
+
+# macOS
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
+*.swp

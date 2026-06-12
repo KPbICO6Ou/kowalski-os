@@ -1,0 +1,13 @@
+[Unit]
+Description=Kowalski OS agent core daemon
+# Inert until the real daemon is installed:
+ConditionPathExists=%h/.local/bin/kow
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/kow serve
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

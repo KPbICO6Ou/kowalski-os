@@ -1,0 +1,28 @@
+---
+# Main user of the desktop system.
+kowalski_user: kowalski
+
+# Set to true when running roles inside a container (smoke tests):
+# skips systemd/sysctl/kernel tasks that need a real booted system.
+kowalski_in_container: false
+
+# NVIDIA: explicit package instead of `ubuntu-drivers install` (idempotency).
+nvidia_driver_pkg: nvidia-driver-570-server
+cuda_keyring_url: >-
+  https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+cuda_toolkit_pkg: cuda-toolkit-12-6
+
+# Ollama
+ollama_version: "0.9.0"
+ollama_tarball_url: "https://github.com/ollama/ollama/releases/download/v{{ ollama_version }}/ollama-linux-amd64.tgz"
+ollama_models:
+  - qwen2.5:14b
+  - nomic-embed-text
+
+# Desktop
+desktop_packages:
+  - xfce4
+  - xfce4-goodies
+  - lightdm
+  - slick-greeter
+  - xorg

@@ -1,0 +1,19 @@
+extends: default
+
+rules:
+  line-length:
+    max: 120
+  truthy:
+    allowed-values: ["true", "false", "yes", "no"]
+  comments:
+    min-spaces-from-content: 1
+  document-start: disable
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
+
+ignore: |
+  .venv/
+  .github/
+  # cloud-init: '#cloud-config' shebang-comment and a long sha-512 hash line
+  provision/autoinstall/autoinstall.yaml

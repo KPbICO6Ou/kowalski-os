@@ -1,0 +1,13 @@
+# Example answers for kow-setup --non-interactive --answers <file>
+# Copy and edit; the real file may contain tokens — keep it out of git.
+ollama:
+  mode: remote
+  url: "http://10.0.0.5:11434"
+  model: "qwen2.5:14b"
+stt:
+  mode: remote
+  url: "http://10.0.0.5:5099"
+  token: ""
+  language: "ru"
+tts:
+  mode: skip

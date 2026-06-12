@@ -1,0 +1,13 @@
+[Unit]
+Description=Kowalski OS first-boot provisioning (ansible-pull)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/kowalski-firstboot.done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/kowalski-firstboot.sh
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

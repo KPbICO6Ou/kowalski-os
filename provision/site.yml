@@ -1,0 +1,11 @@
+---
+- name: Provision Kowalski OS host
+  hosts: all
+  become: true
+  roles:
+    - {role: base, tags: [base]}
+    - {role: nvidia, tags: [nvidia, gpu]}
+    - {role: docker, tags: [docker]}
+    - {role: ollama, tags: [ollama]}
+    - {role: desktop, tags: [desktop]}
+    - {role: kowalski, tags: [kowalski]}

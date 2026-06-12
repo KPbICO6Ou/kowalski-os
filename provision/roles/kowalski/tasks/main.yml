@@ -1,0 +1,24 @@
+---
+- name: Create kowalski directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /opt/kowalski
+    - /opt/kowalski/bin
+
+- name: Create user config directory
+  ansible.builtin.file:
+    path: "/home/{{ kowalski_user }}/.config/kowalski"
+    state: directory
+    owner: "{{ kowalski_user }}"
+    group: "{{ kowalski_user }}"
+    mode: "0700"
+  when: not kowalski_in_container
+
+- name: Install kow-core user unit (inert until the daemon is deployed)
+  ansible.builtin.copy:
+    src: kowalski-core.service
+    dest: /etc/systemd/user/kowalski-core.service
+    mode: "0644"

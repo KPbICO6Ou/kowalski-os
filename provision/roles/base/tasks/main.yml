@@ -1,0 +1,42 @@
+---
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - git
+      - curl
+      - python3
+      - python3-pip
+      - python3-venv
+      - linux-tools-common
+      - fd-find
+      - ripgrep
+      - plocate
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Deploy sysctl tuning
+  ansible.builtin.copy:
+    src: 99-kowalski.conf
+    dest: /etc/sysctl.d/99-kowalski.conf
+    mode: "0644"
+  notify: Reload sysctl
+
+- name: Deploy limits drop-in
+  ansible.builtin.copy:
+    src: kowalski-limits.conf
+    dest: /etc/security/limits.d/kowalski.conf
+    mode: "0644"
+
+- name: Deploy CPU governor oneshot unit
+  ansible.builtin.copy:
+    src: kowalski-governor.service
+    dest: /etc/systemd/system/kowalski-governor.service
+    mode: "0644"
+
+- name: Enable governor unit
+  ansible.builtin.systemd_service:
+    name: kowalski-governor.service
+    enabled: true
+    daemon_reload: true
+  when: not kowalski_in_container

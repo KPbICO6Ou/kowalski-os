@@ -1,0 +1,29 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  identity:
+    hostname: kowalski
+    username: kowalski
+    # placeholder "kowalski" — generate your own: mkpasswd -m sha-512
+    password: "$6$rounds=4096$kowalskisalt$0DCl9bKWxoZUV9bSkc0QSDilQS3DT3PJB9XQwhTYVUKvMSdyEjlz9NCXrYWy09svqo0l1QbgrhKqdc69cBaUC1"
+  ssh:
+    install-server: true
+    authorized-keys: []
+    allow-pw: true
+  storage:
+    layout:
+      name: lvm
+  packages:
+    - git
+    - python3
+    - python3-pip
+    - python3-venv
+    - ansible-core
+  late-commands:
+    - cp /cdrom/firstboot.sh /target/usr/local/sbin/kowalski-firstboot.sh
+    - chmod 0755 /target/usr/local/sbin/kowalski-firstboot.sh
+    - cp /cdrom/kowalski-firstboot.service /target/etc/systemd/system/kowalski-firstboot.service
+    - curtin in-target -- systemctl enable kowalski-firstboot.service

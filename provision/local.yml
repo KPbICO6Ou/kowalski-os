@@ -1,0 +1,4 @@
+---
+# Entry point for ansible-pull on the target machine (firstboot).
+- name: Import site playbook
+  import_playbook: site.yml

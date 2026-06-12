@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dev dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements-dev.txt
+          .venv/bin/pip install -e core -e setup
+          .venv/bin/pip install pytest-asyncio httpx fastapi uvicorn
+      - name: Lint
+        run: make lint
+      - name: Ansible syntax check
+        run: make syntax
+      - name: Tests
+        run: make test
+
+  provision-smoke:
+    runs-on: ubuntu-latest
+    # Heavy (~10 min: full desktop package set). Scope to provisioning changes
+    # later via `on.pull_request.paths` if it becomes annoying.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provisioning smoke test in Docker
+        run: make test-provision

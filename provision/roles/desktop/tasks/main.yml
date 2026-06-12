@@ -1,0 +1,20 @@
+---
+- name: Install XFCE desktop stack
+  ansible.builtin.apt:
+    name: "{{ desktop_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Configure LightDM greeter
+  ansible.builtin.copy:
+    src: 50-kowalski.conf
+    dest: /etc/lightdm/lightdm.conf.d/50-kowalski.conf
+    mode: "0644"
+
+- name: Set default boot target to graphical
+  ansible.builtin.file:
+    src: /usr/lib/systemd/system/graphical.target
+    dest: /etc/systemd/system/default.target
+    state: link
+  when: not kowalski_in_container

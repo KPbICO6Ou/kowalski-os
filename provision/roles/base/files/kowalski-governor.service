@@ -1,0 +1,10 @@
+[Unit]
+Description=Kowalski OS: set CPU governor to performance
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'command -v cpupower >/dev/null && cpupower frequency-set -g performance || true'
+
+[Install]
+WantedBy=multi-user.target

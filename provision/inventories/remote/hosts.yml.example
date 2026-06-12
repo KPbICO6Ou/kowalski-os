@@ -1,0 +1,7 @@
+---
+# Copy to hosts.yml and fill in the target address (hosts.yml is gitignored).
+all:
+  hosts:
+    kowalski:
+      ansible_host: 192.168.1.50
+      ansible_user: kowalski

@@ -1,0 +1,27 @@
+---
+- name: Install NVIDIA driver
+  ansible.builtin.apt:
+    name: "{{ nvidia_driver_pkg }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install CUDA keyring
+  ansible.builtin.apt:
+    deb: "{{ cuda_keyring_url }}"
+
+- name: Install CUDA toolkit
+  ansible.builtin.apt:
+    name: "{{ cuda_toolkit_pkg }}"
+    state: present
+    update_cache: true
+
+- name: Check if reboot is required
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: nvidia_reboot_required
+
+- name: Warn about pending reboot
+  ansible.builtin.debug:
+    msg: "Reboot required to load the NVIDIA driver. Reboot manually when convenient."
+  when: nvidia_reboot_required.stat.exists
