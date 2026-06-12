@@ -45,6 +45,14 @@ def build_default_registry(
             )
         except ImportError:
             pass  # pydantic-ai-toolbox not installed — fs.* tools simply absent
+
+    if config.get_bool("KOW_TOOLBOX_SYSTEM"):
+        try:
+            from .tools.toolbox import build_system_tools
+
+            registry.register_all(build_system_tools())
+        except ImportError:
+            pass  # pydantic-ai-toolbox not installed — system.* host-info tools absent
     return registry
 
 

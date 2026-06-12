@@ -1,67 +1,15 @@
-"""system.* tools: host info and diagnostics.
-
-NOTE: to be replaced by SystemToolset from pydantic-ai-toolbox once it lands
-upstream (see the roadmap, pydantic-ai-toolbox section)."""
+"""system.* tools: host diagnostics. Host info (system.cpu_info, system.memory_info,
+...) comes from the pydantic-ai-toolbox SystemToolset mounted in bootstrap."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import shutil
-from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from .base import RiskLevel, ToolDef, ToolResult
-
-Section = Literal["cpu", "memory", "disk", "battery", "uptime", "load"]
-
-
-class SystemInfoArgs(BaseModel):
-    sections: list[Section] = Field(
-        default=["cpu", "memory", "disk"],
-        description="Which sections of system information to return",
-    )
-
-
-async def system_info(args: SystemInfoArgs) -> ToolResult:
-    import psutil
-
-    info: dict = {}
-    if "cpu" in args.sections:
-        info["cpu"] = {
-            "cores": psutil.cpu_count(logical=False),
-            "threads": psutil.cpu_count(),
-            "percent": psutil.cpu_percent(interval=0.1),
-        }
-    if "memory" in args.sections:
-        mem = psutil.virtual_memory()
-        info["memory"] = {
-            "total_gb": round(mem.total / 2**30, 1),
-            "available_gb": round(mem.available / 2**30, 1),
-            "percent": mem.percent,
-        }
-    if "disk" in args.sections:
-        disk = psutil.disk_usage("/")
-        # psutil's `percent` is misleading on macOS (APFS snapshot volume) —
-        # report an unambiguous used_percent computed from total/free instead
-        info["disk"] = {
-            "total_gb": round(disk.total / 2**30, 1),
-            "free_gb": round(disk.free / 2**30, 1),
-            "used_percent": round((disk.total - disk.free) / disk.total * 100, 1),
-        }
-    if "battery" in args.sections:
-        battery = psutil.sensors_battery()
-        info["battery"] = (
-            {"percent": battery.percent, "plugged": battery.power_plugged} if battery else None
-        )
-    if "uptime" in args.sections:
-        import time
-
-        info["uptime_hours"] = round((time.time() - psutil.boot_time()) / 3600, 1)
-    if "load" in args.sections:
-        info["load_avg"] = psutil.getloadavg()
-    return ToolResult(ok=True, content=json.dumps(info, ensure_ascii=False), data=info)
 
 
 class DiagnosticsArgs(BaseModel):
@@ -92,13 +40,6 @@ async def system_diagnostics(args: DiagnosticsArgs) -> ToolResult:
 
 
 TOOLS = [
-    ToolDef(
-        name="system.info",
-        description="Get host system information: CPU, memory, disk, battery, uptime, load.",
-        args_model=SystemInfoArgs,
-        risk=RiskLevel.READ,
-        handler=system_info,
-    ),
     ToolDef(
         name="system.diagnostics",
         description="Run host diagnostics (wtftools audit): service health, latency, GPU, disks.",

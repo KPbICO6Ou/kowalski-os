@@ -20,9 +20,9 @@ jobs:
           .venv/bin/pip install -r requirements-dev.txt
           .venv/bin/pip install -e "core[api,pydantic-ai]" -e setup
           .venv/bin/pip install pytest-asyncio httpx
-          # PyPI toolbox 0.0.1 lags main (no fs.grep/move/copy) — git until 0.0.2
+          # PyPI still has 0.0.1 — pin the 0.0.2 git tag until it is published
           .venv/bin/pip install --force-reinstall --no-deps \
-            "pydantic-ai-toolbox @ git+https://github.com/wachawo/pydantic-ai-toolbox.git"
+            "pydantic-ai-toolbox @ git+https://github.com/wachawo/pydantic-ai-toolbox.git@0.0.2"
       - name: Lint
         run: make lint
       - name: Ansible syntax check

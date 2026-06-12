@@ -18,8 +18,8 @@ dependencies = [
 [project.optional-dependencies]
 api = ["fastapi>=0.110", "uvicorn>=0.29"]
 dbus = ["dasbus>=1.7"]
-# KOW_LLM=pydantic-ai transport + fs.* tools from pydantic-ai-toolbox
-pydantic-ai = ["pydantic-ai-slim[openai]>=1.0", "pydantic-ai-toolbox>=0.0.1"]
+# KOW_LLM=pydantic-ai transport + fs.*/system.* tools from pydantic-ai-toolbox
+pydantic-ai = ["pydantic-ai-slim[openai]>=1.0", "pydantic-ai-toolbox>=0.0.2"]
 
 [project.scripts]
 kow = "kowalski.cli:main"

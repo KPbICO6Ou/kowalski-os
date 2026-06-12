@@ -21,6 +21,8 @@ DEFAULTS: dict[str, str] = {
     # allowed path); KOW_TOOLBOX_FS_WRITE=1 unlocks write methods (still confirmed)
     "KOW_TOOLBOX_FS": "1",
     "KOW_TOOLBOX_FS_WRITE": "0",
+    # pydantic-ai-toolbox: mount SystemToolset as read-only system.* host-info tools
+    "KOW_TOOLBOX_SYSTEM": "1",
     # Low temperature keeps local models' tool-call markup well-formed
     # (qwen2.5 at default temp occasionally emits unparseable <tool_call> blocks)
     "KOW_TEMPERATURE": "0.2",

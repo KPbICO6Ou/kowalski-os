@@ -31,6 +31,7 @@ kow journal tail [-n 50]
 | `KOW_TEMPERATURE` | `0.2` | low temp keeps local models' tool-call markup well-formed |
 | `KOW_TOOLBOX_FS` | `1` | mount `fs.*` from pydantic-ai-toolbox |
 | `KOW_TOOLBOX_FS_WRITE` | `0` | unlock fs.* write methods (still confirmed) |
+| `KOW_TOOLBOX_SYSTEM` | `1` | mount read-only `system.*` host-info tools from pydantic-ai-toolbox |
 | `KOW_DB_PATH` | `~/.local/share/kowalski/kowalski.db` | SQLite (journal, notes, reminders) |
 | `KOW_ALLOWED_PATHS` | `~` | path allowlist, `:`-separated |
 | `KOW_AUTO_ALLOW_NETWORK` | `0` | run network tools without confirmation |
@@ -46,7 +47,7 @@ kow journal tail [-n 50]
 | Tool | Risk | Description |
 |---|---|---|
 | `files.search_by_name` | read | file search: fd → plocate → python walk |
-| `system.info` | read | CPU/RAM/disk/battery (psutil) |
+| `system.*` (9 tools) | read | pydantic-ai-toolbox SystemToolset: cpu_info, memory_info, disk_usage, disk_partitions, uptime, load_avg, top_processes, network_io, battery — read-only host info (psutil) |
 | `system.diagnostics` | read | `wtf audit --format json` wrapper |
 | `apps.open` | write | open an application/file/URL |
 | `notes.create` | write | note in SQLite |

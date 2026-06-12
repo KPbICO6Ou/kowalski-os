@@ -7,7 +7,11 @@ import pytest
 pytest.importorskip("pydantic_ai_toolbox")
 
 from kowalski.tools.base import RiskLevel  # noqa: E402
-from kowalski.tools.toolbox import build_filesystem_tools, classify_risk  # noqa: E402
+from kowalski.tools.toolbox import (  # noqa: E402
+    build_filesystem_tools,
+    build_system_tools,
+    classify_risk,
+)
 
 
 def test_risk_classification():
@@ -53,6 +57,34 @@ async def test_fs_write_blocked_when_read_only(tmp_path: Path, registry):
     result = await registry.execute("fs.write_file", {"path": "x.txt", "content": "no"})
     assert not result.ok
     assert "read-only" in result.content
+
+
+def test_system_tools_mounted():
+    tools = build_system_tools()
+    names = {t.name for t in tools}
+    assert {
+        "system.cpu_info",
+        "system.memory_info",
+        "system.disk_usage",
+        "system.disk_partitions",
+        "system.uptime",
+        "system.load_avg",
+        "system.top_processes",
+        "system.network_io",
+        "system.battery",
+    } <= names
+    # method names (cpu_info, battery, ...) don't match READ prefixes —
+    # the risk_override must force every tool to READ
+    assert all(t.risk == RiskLevel.READ for t in tools)
+
+
+async def test_system_disk_usage_through_registry(registry):
+    registry.register_all(build_system_tools())
+    result = await registry.execute("system.disk_usage", {})
+    assert result.ok
+    assert isinstance(result.data, dict)
+    assert result.data  # non-empty payload with disk numbers
+    assert any("total" in key for key in result.data)
 
 
 async def test_fs_delete_requires_confirmation(tmp_path: Path, deny_registry):

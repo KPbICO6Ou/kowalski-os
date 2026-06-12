@@ -20,7 +20,7 @@ def test_message_conversion_roles():
             "content": "",
             "tool_calls": [
                 {"function": {"name": "files.search_by_name", "arguments": {"pattern": "*.md"}}},
-                {"function": {"name": "system.info", "arguments": {}}},
+                {"function": {"name": "system.cpu_info", "arguments": {}}},
             ],
         },
         {"role": "tool", "content": "Found 3 files"},
@@ -37,7 +37,7 @@ def test_message_conversion_roles():
     first_return = converted[3].parts[0]
     second_return = converted[4].parts[0]
     assert first_return.tool_name == "files.search_by_name"
-    assert second_return.tool_name == "system.info"
+    assert second_return.tool_name == "system.cpu_info"
     assert first_return.tool_call_id != second_return.tool_call_id
 
 

@@ -46,8 +46,14 @@ def _args_model_from_signature(name: str, fn) -> type:
     return create_model(f"{name}_Args", **fields)
 
 
-def build_tools(toolset: Any, namespace: str) -> list[ToolDef]:
-    """Wrap every @tool-marked method of a toolbox toolset as a ToolDef."""
+def build_tools(
+    toolset: Any, namespace: str, risk_override: RiskLevel | None = None
+) -> list[ToolDef]:
+    """Wrap every @tool-marked method of a toolbox toolset as a ToolDef.
+
+    `risk_override` assigns that risk to every tool instead of name-prefix
+    classification (e.g. SystemToolset's cpu_info/battery don't match READ
+    prefixes but are all read-only)."""
     tools: list[ToolDef] = []
     cls = type(toolset)
     for attr_name in dir(cls):
@@ -67,7 +73,7 @@ def build_tools(toolset: Any, namespace: str) -> list[ToolDef]:
                 name=f"{namespace}.{tool_name}",
                 description=description,
                 args_model=args_model,
-                risk=classify_risk(tool_name),
+                risk=risk_override if risk_override is not None else classify_risk(tool_name),
                 handler=_make_handler(bound),
             )
         )
@@ -98,3 +104,10 @@ def build_filesystem_tools(root, read_only: bool = True) -> list[ToolDef]:
 
     toolset = FilesystemToolset(root=root, read_only=read_only)
     return build_tools(toolset, "fs")
+
+
+def build_system_tools() -> list[ToolDef]:
+    """system.* tools backed by pydantic-ai-toolbox SystemToolset (read-only host info)."""
+    from pydantic_ai_toolbox import SystemToolset
+
+    return build_tools(SystemToolset(), "system", risk_override=RiskLevel.READ)
