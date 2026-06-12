@@ -2,8 +2,6 @@ ollama>=0.4
 pydantic>=2.6
 apscheduler>=3.10,<4
 psutil>=5.9
-# pydantic-ai layer (KOW_LLM=pydantic-ai) + fs.*/system.* tools; until 0.0.2 is
-# published to PyPI, install from the git tag:
-#   pip install "pydantic-ai-toolbox @ git+https://github.com/wachawo/pydantic-ai-toolbox.git@0.0.2"
+# pydantic-ai layer (KOW_LLM=pydantic-ai) + fs.*/system.* toolsets
 pydantic-ai-slim[openai]>=1.0
 pydantic-ai-toolbox>=0.0.2
