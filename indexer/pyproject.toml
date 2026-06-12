@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kowalski-indexer"
+version = "0.1.0"
+description = "Kowalski OS semantic file indexer: scan, chunk, embed via Ollama, search via sqlite-vec"
+requires-python = ">=3.12"
+license = {text = "Apache-2.0"}
+dependencies = [
+    "kowalski",
+    "ollama>=0.4",
+    "watchdog>=4",
+    "sqlite-vec>=0.1",
+    "numpy>=1.26",
+]
+
+[project.scripts]
+kow-index = "kowindex.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["kowindex*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
