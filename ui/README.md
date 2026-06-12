@@ -1,4 +1,4 @@
 # ui/
 
-Omnibox (Super+Space), чат-окно, трей-индикатор — GTK3/PyGObject.
-Появится в фазе 1–2. Клиенты `kow-core` через D-Bus `org.kowalski.Core`.
+Omnibox (Super+Space), chat window, tray indicator — GTK3/PyGObject.
+Lands in phases 1–2. Clients of `kow-core` via D-Bus `org.kowalski.Core`.

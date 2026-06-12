@@ -64,7 +64,7 @@ class ReminderScheduler:
                 self._schedule(row["id"], row["text"], due)
 
     async def _fire(self, reminder_id: int, text: str, missed: bool) -> None:
-        title = "Пропущенное напоминание" if missed else "Напоминание"
+        title = "Missed reminder" if missed else "Reminder"
         try:
             await platform.notify(title, text)
         except Exception:

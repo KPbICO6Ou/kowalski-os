@@ -1,61 +1,63 @@
 # Provisioning
 
-Цель фазы 0: «вставил флешку → через 20 минут готовая система с логин-экраном».
+Phase-0 goal: "plug in a USB stick → a ready system with a login screen in
+20 minutes".
 
-## Поток
+## Flow
 
-1. **USB c autoinstall** — Ubuntu 24.04 Server ISO + `provision/autoinstall/`
-   (cloud-init user-data). Полностью unattended: пользователь, ssh, базовые пакеты.
-2. **Первый бут** — `kowalski-firstboot.service` запускает
-   `ansible-pull -U <repo> provision/local.yml` и отключает сам себя.
-3. **Ansible** доводит систему: sysctl/limits → NVIDIA+CUDA → Docker(+toolkit) →
-   Ollama (+модели) → XFCE+LightDM → каркас kowalski.
+1. **Autoinstall USB** — Ubuntu 24.04 Server ISO + `provision/autoinstall/`
+   (cloud-init user-data). Fully unattended: user, ssh, base packages.
+2. **First boot** — `kowalski-firstboot.service` runs
+   `ansible-pull -U <repo> provision/local.yml` and disables itself.
+3. **Ansible** finishes the system: sysctl/limits → NVIDIA+CUDA →
+   Docker(+toolkit) → Ollama (+models) → XFCE+LightDM → kowalski scaffolding.
 
-Альтернатива: удалённый прогон по ssh —
+Alternative: a remote run over ssh —
 `ansible-playbook provision/site.yml -i provision/inventories/remote/hosts.yml`.
 
-## Теги
+## Tags
 
-| Тег | Роли | Когда пропускать |
+| Tag | Roles | When to skip |
 |---|---|---|
 | `base` | sysctl, limits, governor | — |
-| `nvidia`, `gpu` | драйвер, cuda-keyring, toolkit | нет NVIDIA / контейнер |
-| `docker` | docker-ce, compose, nvidia-container-toolkit (под `gpu`) | — |
-| `ollama` | бинарник, unit, модели | модели — только на железе |
-| `desktop` | xfce4, lightdm, slick-greeter, xorg | быстрые итерации теста |
-| `kowalski` | каталоги, user unit (инертный) | — |
+| `nvidia`, `gpu` | driver, cuda-keyring, toolkit | no NVIDIA / container |
+| `docker` | docker-ce, compose, nvidia-container-toolkit (under `gpu`) | — |
+| `ollama` | binary, unit, models | model pulls happen on real hardware only |
+| `desktop` | xfce4, lightdm, slick-greeter, xorg | fast test iterations |
+| `kowalski` | directories, user unit (inert) | — |
 
-Контейнерный режим: `-e kowalski_in_container=true` отключает systemd/sysctl-задачи.
+Container mode: `-e kowalski_in_container=true` disables systemd/sysctl tasks.
 
-## Smoke-тест без железа
+## Architectures
 
-```bash
-make test-provision        # полный: cloud-init schema + 2×playbook (changed=0)
-make test-provision-fast   # без desktop-пакетов (~быстрее на порядок)
-```
+Both **amd64** and **arm64** are supported — the architecture is detected
+automatically (`kowalski_deb_arch` / `cuda_repo_arch` in `group_vars/all.yml`):
 
-## Архитектуры
-
-Поддерживаются **amd64** и **arm64** — архитектура определяется автоматически
-(`kowalski_deb_arch` / `cuda_repo_arch` в `group_vars/all.yml`):
-
-| Компонент | amd64 | arm64 |
+| Component | amd64 | arm64 |
 |---|---|---|
 | Docker repo | `arch=amd64` | `arch=arm64` |
 | Ollama | `ollama-linux-amd64.tgz` | `ollama-linux-arm64.tgz` |
 | CUDA repo | `ubuntu2404/x86_64` | `ubuntu2404/sbsa` (Server Base System Arch) |
 | nvidia-container-toolkit | `deb/amd64` | `deb/arm64` |
-| Драйвер | `nvidia-driver-*-server` | `nvidia-driver-*-server` (SBSA) |
+| Driver | `nvidia-driver-*-server` | `nvidia-driver-*-server` (SBSA) |
 
-⚠ **Jetson (Orin/Xavier) не покрывается этим путём**: там драйвер входит в L4T/JetPack
-и ставится прошивкой, CUDA — из JetPack-репо. Для Jetson пропускайте роль
-`nvidia` (`--skip-tags nvidia`) и ставьте JetPack-стек вручную; роли docker/ollama/desktop
-работают как есть. Smoke-тест в Docker на Apple Silicon выполняется в arm64-контейнере,
-то есть arm64-ветки ролей проверяются локально каждым прогоном.
+⚠ **Jetson (Orin/Xavier) is not covered by this path**: there the driver ships
+with L4T/JetPack firmware and CUDA comes from the JetPack repos. On Jetson,
+skip the `nvidia` role (`--skip-tags nvidia`) and install the JetPack stack
+manually; the docker/ollama/desktop roles work as-is. The Docker smoke test on
+Apple Silicon runs in an arm64 container, so the arm64 role branches are
+exercised locally on every run.
 
-## Отложено до появления железа
+## Smoke testing without hardware
 
-- реальный прогон роли `nvidia` и warm-pull моделей Ollama;
-- проверка загрузки в LightDM/XFCE;
-- ветка локальной установки в `kow-setup` (docker compose для STT/TTS);
-- интеграция wtftools (`wtf ai`) как диагностического слоя.
+```bash
+make test-provision        # full: cloud-init schema + 2× playbook (changed=0)
+make test-provision-fast   # without desktop packages (order of magnitude faster)
+```
+
+## Deferred until hardware is available
+
+- a real run of the `nvidia` role and Ollama model warm-pull;
+- boot into LightDM/XFCE verification;
+- the local-install branch in `kow-setup` (docker compose for STT/TTS);
+- wtftools (`wtf ai`) integration as the diagnostics layer.

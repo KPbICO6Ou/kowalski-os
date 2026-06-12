@@ -1,7 +1,7 @@
 """system.* tools: host info and diagnostics.
 
-NOTE: планируется замена на SystemToolset из pydantic-ai-toolbox, когда тот
-появится в upstream (см. roadmap, раздел pydantic-ai-toolbox)."""
+NOTE: to be replaced by SystemToolset from pydantic-ai-toolbox once it lands
+upstream (see the roadmap, pydantic-ai-toolbox section)."""
 
 from __future__ import annotations
 

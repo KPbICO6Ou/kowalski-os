@@ -1,4 +1,4 @@
 # voice/
 
-`kow-voice`: openWakeWord + silero-vad локально → wachawo/speech-to-text (HTTP) →
-агент → wachawo/text-to-speech (HTTP). State machine с barge-in. Фаза 3.
+`kow-voice`: openWakeWord + silero-vad locally → wachawo/speech-to-text (HTTP) →
+agent → wachawo/text-to-speech (HTTP). State machine with barge-in. Phase 3.

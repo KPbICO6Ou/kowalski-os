@@ -1,35 +1,38 @@
-# Архитектура
+# Architecture
 
-Подробная концепция, модули и фазы — в [../kowalski-os-plan.md](../kowalski-os-plan.md).
-Здесь — краткая выжимка принципов, которым следует код.
+The detailed concept, modules and phases are in
+[../kowalski-os-plan.md](../kowalski-os-plan.md) (working document).
+This page is a short summary of the principles the code follows.
 
-## Слои
+## Layers
 
 ```
-UI (GTK3: omnibox, chat, tray)          ← тонкие клиенты
+UI (GTK3: omnibox, chat, tray)          ← thin clients
         │ D-Bus org.kowalski.Core / unix socket (dev)
-kow-core (демон): агентный цикл, tool-реестр,
-журнал, политики безопасности, планировщик
+kow-core (daemon): agent loop, tool registry,
+action journal, security policies, scheduler
         │
-Tools (MCP-совместимые схемы) · Память/RAG · Голос
+Tools (MCP-shaped schemas) · Memory/RAG · Voice
         │
-Ollama (LLM/vision/embeddings) · внешние HTTP-сервисы STT/TTS
+Ollama (LLM/vision/embeddings) · external HTTP STT/TTS services
         │
 XFCE 4.18 · Xorg · LightDM · Ubuntu 24.04 · systemd
 ```
 
-## Принципы
+## Principles
 
-1. **UI ≠ логика.** Вся логика в `kow-core`; интерфейсы (CLI, GTK, голос) — клиенты.
-2. **Безопасность с первого дня.** У каждого tool — уровень риска
-   (read/write/destructive/network). Политика решает ALLOW/CONFIRM/DENY,
-   allowlist путей, подтверждения через UI. Каждый вызов — в журнале SQLite,
-   включая отклонённые.
-3. **MCP-совместимость без MCP-транспорта.** Первая итерация — in-process
-   реестр; дескрипторы tool'ов поле-в-поле совпадают с MCP `Tool`, поэтому
-   вынос в отдельные MCP-серверы — механическая операция.
-4. **Кроссплатформенная разработка.** Ядро развивается test-first на macOS;
-   Linux-специфика (D-Bus, systemd, GTK, fd/plocate) — за тонкими швами
-   (`ipc/`, `platform.py`, backend-цепочки) и проверяется в Docker ubuntu:24.04.
-5. **X11, не Wayland** — ради xdotool/AT-SPI/скриншотов; абстракции ввода
-   закладываются на будущее.
+1. **UI ≠ logic.** All logic lives in `kow-core`; interfaces (CLI, GTK, voice)
+   are clients.
+2. **Security from day one.** Every tool carries a risk level
+   (read/write/destructive/network). The policy decides ALLOW/CONFIRM/DENY,
+   with a path allowlist and UI confirmations. Every invocation lands in the
+   SQLite journal — including denied ones.
+3. **MCP compatibility without MCP transport.** The first iteration uses an
+   in-process registry; tool descriptors match the MCP `Tool` shape
+   field-for-field, so extracting real MCP servers later is mechanical.
+4. **Cross-platform development.** The core is developed test-first on macOS;
+   Linux specifics (D-Bus, systemd, GTK, fd/plocate) sit behind thin seams
+   (`ipc/`, `platform.py`, backend chains) and are exercised in a Docker
+   ubuntu:24.04 container.
+5. **X11, not Wayland** — for xdotool/AT-SPI/screenshots; input abstractions
+   are designed with a future Wayland port in mind.

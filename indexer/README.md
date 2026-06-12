@@ -1,4 +1,4 @@
 # indexer/
 
-Семантический файловый индекс: watchdog (inotify) → чанкинг →
-nomic-embed-text через Ollama → sqlite-vec. Фаза 2.
+Semantic file index: watchdog (inotify) → chunking →
+nomic-embed-text via Ollama → sqlite-vec. Phase 2.
