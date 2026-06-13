@@ -39,6 +39,9 @@ async def run_daemon(api: bool = False) -> int:
     ipc_server = make_ipc_server(config, service)
 
     scheduler.start()
+    recipe_engine = getattr(registry, "recipe_engine", None)
+    if recipe_engine is not None:
+        recipe_engine.arm_all()  # re-arm saved time/interval/inotify recipes
     tasks = [asyncio.create_task(ipc_server.serve(), name="ipc")]
 
     if api or config.get_bool("KOW_API_ENABLED"):

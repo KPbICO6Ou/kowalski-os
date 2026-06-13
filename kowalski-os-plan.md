@@ -228,6 +228,7 @@ mbsync/notmuch backend, GTK-клиент, mail-tools, AI-драфты.
 
 ### Фаза 5 — Автоматизация и vision (3–4 недели)
 Скриншот+VLM, AT-SPI/xdotool управление, YAML-рецепты, sandboxed shell. Многошаговые агентные задачи с планированием.
+**Статус (каркас готов):** tools `screen.capture/describe` (vision), `windows.*`/`ui.tree`/`input.*` (uiauto), `system.run` (bwrap/firejail sandbox + небезопасный fallback), движок YAML-рецептов (триггеры manual/time/interval/inotify → цепочка tools через реестр с пошаговой политикой и шаблонами `{{ steps.N.field }}`) + `recipes.*`. Разработано test-first на macOS с моками; X11/AT-SPI/bwrap-пути и реальный VLM проверяются на Linux/железе.
 
 ### Фаза 6 — Продукт (2–3 недели)
 Упаковка в .deb (`kowalski-core`, `kowalski-ui`, `kowalski-voice`), свой ISO `kowalski-os-1.0-amd64.iso` (Cubic / autoinstall-образ), тема XFCE, onboarding-мастер при первом входе, документация.

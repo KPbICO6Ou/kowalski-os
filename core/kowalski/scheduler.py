@@ -22,6 +22,11 @@ class ReminderScheduler:
         self._store = store
         self._scheduler = AsyncIOScheduler()
 
+    @property
+    def aps(self) -> AsyncIOScheduler:
+        """The underlying APScheduler, shared with the recipe engine."""
+        return self._scheduler
+
     def start(self) -> None:
         self._scheduler.start()
         self._rearm()

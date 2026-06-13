@@ -56,6 +56,10 @@ The socket op `{"op": "conversations"}` returns the recent conversation list.
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_TLS` | — / `587` / `1` | outgoing SMTP server |
 | `SMTP_USER` / `SMTP_PASSWORD` | — | SMTP login — keep secrets in the 0600 conf; use an app-password |
 | `MAIL_FROM` | — | From address for sent mail; empty falls back to `SMTP_USER` |
+| `KOW_VISION` / `KOW_VISION_MODEL` | `1` / `qwen2.5vl` | screen capture + vision-LLM tools |
+| `KOW_UIAUTO` / `UIAUTO_TREE_MAX_DEPTH` | `1` / `6` | window/accessibility/input tools (X11) |
+| `KOW_SHELL` / `KOW_SHELL_TIMEOUT` | `1` / `30` | sandboxed shell `system.run` |
+| `KOW_RECIPES` / `KOW_RECIPES_DIR` | `1` / `~/.config/kowalski/recipes` | YAML automation recipes |
 
 ## Tools (MVP)
 
@@ -75,6 +79,12 @@ The socket op `{"op": "conversations"}` returns the recent conversation list.
 | `mail.read` | read | read one message by id (headers + body text) |
 | `mail.draft` | write | compose and save a local email draft (the AI writes the body); returns a draft id |
 | `mail.send` | destructive | send a draft (`draft_id`) or inline (`to`/`subject`/`body`) — irreversible, so **always confirmed** and never auto-allowed |
+| `screen.capture` / `screen.describe` | read | screenshot the primary screen; describe it via a vision model (qwen2.5-vl/llava over Ollama) |
+| `windows.list` / `windows.activate` | read / write | list open windows; focus one (wmctrl/xdotool, X11) |
+| `ui.tree` | read | read a window's accessibility tree (AT-SPI), depth-capped |
+| `input.type` / `input.key` / `input.click` | destructive | drive keyboard/mouse — typed input lands in whatever window is focused, so **always confirmed** |
+| `system.run` | destructive | run a shell command — sandboxed via bubblewrap/firejail on Linux, unsandboxed fallback on macOS/CI; `cwd` must be inside the allowlist; **always confirmed** |
+| `recipes.list` / `recipes.add` / `recipes.run` / `recipes.remove` | read / write | YAML automation recipes: a trigger (manual/time/interval/inotify) drives a chain of tool calls; each step passes through the policy/confirmation/journal like any direct call |
 
 Risk levels: read → executes; write → allowed inside the allowlist, otherwise
 confirmation; destructive → always confirmation; network → confirmation

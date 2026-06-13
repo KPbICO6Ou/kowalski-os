@@ -26,6 +26,14 @@ DEFAULTS: dict[str, str] = {
     # Low temperature keeps local models' tool-call markup well-formed
     # (qwen2.5 at default temp occasionally emits unparseable <tool_call> blocks)
     "KOW_TEMPERATURE": "0.2",
+    # Phase-5 capabilities (all gated; the risky ones still require confirmation)
+    "KOW_VISION": "1",            # screen.capture / screen.describe (READ)
+    "KOW_VISION_MODEL": "qwen2.5vl",
+    "KOW_UIAUTO": "1",            # windows.* / ui.tree (READ/WRITE) + input.* (DESTRUCTIVE)
+    "KOW_SHELL": "1",             # system.run (DESTRUCTIVE, sandboxed on Linux)
+    "KOW_SHELL_TIMEOUT": "30",
+    "KOW_RECIPES": "1",           # YAML automation recipes
+    "KOW_RECIPES_DIR": "",        # empty = ~/.config/kowalski/recipes
     "KOW_DB_PATH": "~/.local/share/kowalski/kowalski.db",
     # semantic index database built by kow-index (the indexer/ package)
     "KOW_INDEX_DB": "~/.local/share/kowalski/index.db",

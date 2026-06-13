@@ -61,7 +61,40 @@ def build_default_registry(
             registry.register_all(build_system_tools())
         except ImportError:
             pass  # pydantic-ai-toolbox not installed — system.* host-info tools absent
+
+    if config.get_bool("KOW_VISION"):
+        from .tools.vision import build_vision_tools
+
+        registry.register_all(build_vision_tools(config))
+    if config.get_bool("KOW_UIAUTO"):
+        from .tools.uiauto import build_uiauto_tools
+
+        registry.register_all(build_uiauto_tools(config))
+    if config.get_bool("KOW_SHELL"):
+        from .tools.shell import build_shell_tools
+
+        registry.register_all(build_shell_tools(config))
+    if config.get_bool("KOW_RECIPES"):
+        _register_recipe_tools(registry, config, scheduler)
     return registry
+
+
+def _register_recipe_tools(
+    registry: ToolRegistry, config: Config, scheduler: ReminderScheduler
+) -> None:
+    """Wire the recipe engine (it needs the built registry to run steps and the
+    scheduler to arm time/interval triggers) and stash it on the registry so the
+    daemon can arm saved recipes once the scheduler is started."""
+    from pathlib import Path
+
+    from .recipes.engine import RecipeEngine
+    from .recipes.store import DEFAULT_RECIPES_DIR, RecipeStore
+    from .tools.recipes import build_recipe_tools
+
+    recipe_dir = Path(config.get("KOW_RECIPES_DIR") or str(DEFAULT_RECIPES_DIR)).expanduser()
+    engine = RecipeEngine(RecipeStore(recipe_dir), registry, scheduler.aps)
+    registry.register_all(build_recipe_tools(engine))
+    registry.recipe_engine = engine
 
 
 def _register_mail_tools(registry: ToolRegistry, config: Config, store: Store) -> None:
