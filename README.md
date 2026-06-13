@@ -23,8 +23,10 @@ clients talking to it over D-Bus. The full concept and phase plan live in
 make venv            # python3 -m venv + dev dependencies
 make lint            # yamllint + ansible-lint + ruff
 make syntax          # ansible-playbook --syntax-check
-make test            # pytest for core/ and setup/
+make test            # pytest across core/ setup/ ui/ indexer/ voice/
 make test-provision  # Ansible role smoke test in Docker (ubuntu:24.04)
+make deb             # build dist/kowalski_<ver>_<arch>.deb in Docker
+make test-deb        # build the .deb, install it in a clean container, smoke-test the CLIs
 ```
 
 Run the core locally (requires [Ollama](https://ollama.com)):
@@ -39,6 +41,7 @@ ollama pull qwen2.5:7b
 
 - [docs/architecture.md](docs/architecture.md) — layers and principles
 - [docs/provisioning.md](docs/provisioning.md) — bare-metal install, USB, ansible-pull
+- [docs/packaging.md](docs/packaging.md) — .deb build, XFCE theme/onboarding, ISO
 
 ## License
 

@@ -1,0 +1,33 @@
+#!/bin/bash
+# First-login onboarding: apply the theme, run the setup wizard once, enable the
+# kow-core user service. Guarded by a stamp file so it runs only on first login.
+set -euo pipefail
+
+STAMP="${XDG_CONFIG_HOME:-$HOME/.config}/kowalski/.onboarding-done"
+mkdir -p "$(dirname "$STAMP")"
+if [ -f "$STAMP" ]; then
+    exit 0
+fi
+
+echo "=== Welcome to Kowalski OS ==="
+echo
+
+if [ -x /usr/share/kowalski/apply-theme.sh ]; then
+    /usr/share/kowalski/apply-theme.sh || true
+fi
+
+if command -v kow-setup >/dev/null 2>&1; then
+    echo "Running first-run setup (Ollama / STT / TTS endpoints)…"
+    kow-setup || echo "Setup skipped or incomplete — rerun later with: kow-setup"
+fi
+
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl --user enable --now kowalski-core.service 2>/dev/null \
+        && echo "kow-core agent daemon enabled." \
+        || echo "Could not enable kow-core (enable later: systemctl --user enable --now kowalski-core)."
+fi
+
+touch "$STAMP"
+echo
+echo "Done. Press Super+Space for the omnibox (once the UI lands), or run: kow ask \"…\""
+read -r -p "Press Enter to close."

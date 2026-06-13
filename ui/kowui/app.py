@@ -14,11 +14,13 @@ import argparse
 import asyncio
 import sys
 
+from . import __version__
 from .client import DaemonUnavailableError, OmniClient
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kow-omni", description="Kowalski omnibox UI")
+    parser.add_argument("--version", action="version", version=f"kow-omni {__version__}")
     parser.add_argument("--cli", action="store_true", help="run the terminal REPL instead of GTK")
     parser.add_argument("--socket", metavar="PATH", default=None, help="daemon socket path")
     return parser

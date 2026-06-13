@@ -4,7 +4,7 @@ BIN := $(VENV)/bin
 PLAYBOOK := provision/site.yml
 INVENTORY := provision/inventories/local/hosts.yml
 
-.PHONY: venv lint syntax test test-core test-setup test-ui test-indexer test-voice test-provision test-provision-fast clean
+.PHONY: venv lint syntax test test-core test-setup test-ui test-indexer test-voice test-provision test-provision-fast deb test-deb clean
 
 venv:
 	$(PYTHON) -m venv $(VENV)
@@ -44,6 +44,15 @@ test-provision-fast:
 	docker build -t kowalski-provision-test provision/test
 	docker run --rm -v "$$PWD":/repo:ro -e SKIP_TAGS=gpu,desktop kowalski-provision-test
 
+deb:
+	mkdir -p dist
+	docker build -t kowalski-deb-build packaging/deb
+	docker run --rm -v "$$PWD":/repo:ro -v "$$PWD/dist":/out kowalski-deb-build
+
+test-deb: deb
+	docker run --rm -v "$$PWD/dist":/out -v "$$PWD/packaging/deb/verify-deb.sh":/verify.sh:ro \
+		ubuntu:24.04 bash /verify.sh
+
 clean:
-	rm -rf $(VENV) .pytest_cache .ruff_cache
+	rm -rf $(VENV) .pytest_cache .ruff_cache dist
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +

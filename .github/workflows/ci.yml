@@ -38,3 +38,16 @@ jobs:
       - uses: actions/checkout@v6
       - name: Provisioning smoke test in Docker
         run: make test-provision
+
+  deb-build:
+    runs-on: ubuntu-latest
+    # Build the amd64 .deb, install it in a clean container, smoke-test the CLIs.
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and verify the .deb
+        run: make test-deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kowalski-deb-amd64
+          path: dist/*.deb
+          if-no-files-found: error

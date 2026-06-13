@@ -30,3 +30,4 @@ answers.yaml
 .idea/
 .vscode/
 *.swp
+dist/

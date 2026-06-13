@@ -232,6 +232,7 @@ mbsync/notmuch backend, GTK-клиент, mail-tools, AI-драфты.
 
 ### Фаза 6 — Продукт (2–3 недели)
 Упаковка в .deb (`kowalski-core`, `kowalski-ui`, `kowalski-voice`), свой ISO `kowalski-os-1.0-amd64.iso` (Cubic / autoinstall-образ), тема XFCE, onboarding-мастер при первом входе, документация.
+**Статус (каркас готов):** `.deb` собирается и проверяется в Docker (`make deb`/`make test-deb`) — единый пакет `kowalski` с bundled venv под /opt/kowalski (зависимости вроде ollama/pydantic-ai нет в репо Ubuntu), `/usr/bin` лаунчеры, systemd user unit; amd64+arm64 по арх. сборки. Тема XFCE (xfconf) + onboarding (apply-theme → kow-setup → enable kow-core) в `packaging/theme/`. Сборка/загрузка ISO — на железе/VM (см. docs/packaging.md).
 
 Итого: ~4–5 месяцев соло в спокойном темпе; MVP (фазы 0–1) — за месяц.
 

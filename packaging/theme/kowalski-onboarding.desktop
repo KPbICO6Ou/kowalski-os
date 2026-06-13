@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Kowalski OS First-Run Setup
+Comment=Apply the Kowalski theme and run kow-setup on first login
+Exec=kowalski-onboarding
+Icon=preferences-desktop
+Terminal=true
+X-XFCE-Autostart-enabled=true
+OnlyShowIn=XFCE;
