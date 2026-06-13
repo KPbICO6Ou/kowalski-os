@@ -100,7 +100,12 @@ async def cmd_ask(args) -> int:
 
     scheduler.start()
     llm = build_llm(config, model_override=args.model or "")
-    loop = AgentLoop(llm, registry, max_iterations=config.get_int("KOW_MAX_ITERATIONS"))
+    loop = AgentLoop(
+        llm,
+        registry,
+        max_iterations=config.get_int("KOW_MAX_ITERATIONS"),
+        context_provider=getattr(registry, "context_provider", None),
+    )
 
     exit_code = 0
     try:

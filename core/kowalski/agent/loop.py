@@ -28,10 +28,19 @@ MAX_CONSECUTIVE_INVALID = 3
 
 
 class AgentLoop:
-    def __init__(self, llm: LLMClient, registry: ToolRegistry, max_iterations: int = 8):
+    def __init__(
+        self,
+        llm: LLMClient,
+        registry: ToolRegistry,
+        max_iterations: int = 8,
+        context_provider=None,
+    ):
         self.llm = llm
         self.registry = registry
         self.max_iterations = max_iterations
+        # Optional ContextProvider (memory/profile): given the user prompt it
+        # returns extra system-prompt text (profile facts + recalled memories).
+        self.context_provider = context_provider
 
     async def run(
         self,
@@ -40,8 +49,16 @@ class AgentLoop:
         conversation_id: str | None = None,
     ) -> AsyncIterator[AgentEvent]:
         conversation_id = conversation_id or uuid.uuid4().hex
+        system = build_system_prompt()
+        if self.context_provider is not None:
+            try:
+                extra = await self.context_provider.context_for(prompt)
+            except Exception:  # memory must never break a turn
+                extra = ""
+            if extra:
+                system += "\n\n" + extra
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": build_system_prompt()},
+            {"role": "system", "content": system},
             *(history or []),
             {"role": "user", "content": prompt},
         ]

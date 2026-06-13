@@ -60,6 +60,7 @@ The socket op `{"op": "conversations"}` returns the recent conversation list.
 | `KOW_UIAUTO` / `UIAUTO_TREE_MAX_DEPTH` | `1` / `6` | window/accessibility/input tools (X11) |
 | `KOW_SHELL` / `KOW_SHELL_TIMEOUT` | `1` / `30` | sandboxed shell `system.run` |
 | `KOW_RECIPES` / `KOW_RECIPES_DIR` | `1` / `~/.config/kowalski/recipes` | YAML automation recipes |
+| `KOW_MEMORY` / `KOW_MEMORY_RECALL_K` | `1` / `5` | long-term memory + profile injection into the system prompt |
 
 ## Tools (MVP)
 

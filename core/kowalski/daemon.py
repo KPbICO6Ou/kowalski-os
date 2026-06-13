@@ -32,7 +32,12 @@ async def run_daemon(api: bool = False) -> int:
     llm = build_llm(config)
 
     def loop_factory() -> AgentLoop:
-        return AgentLoop(llm, registry, max_iterations=config.get_int("KOW_MAX_ITERATIONS"))
+        return AgentLoop(
+            llm,
+            registry,
+            max_iterations=config.get_int("KOW_MAX_ITERATIONS"),
+            context_provider=getattr(registry, "context_provider", None),
+        )
 
     conversations = ConversationStore(store)
     service = AgentService(loop_factory, registry, confirmations, conversations=conversations)

@@ -34,6 +34,10 @@ DEFAULTS: dict[str, str] = {
     "KOW_SHELL_TIMEOUT": "30",
     "KOW_RECIPES": "1",           # YAML automation recipes
     "KOW_RECIPES_DIR": "",        # empty = ~/.config/kowalski/recipes
+    # Long-term memory + personalization (M8): memory.*/profile.* tools and
+    # injection of profile facts + recalled memories into the system prompt
+    "KOW_MEMORY": "1",
+    "KOW_MEMORY_RECALL_K": "5",
     "KOW_DB_PATH": "~/.local/share/kowalski/kowalski.db",
     # semantic index database built by kow-index (the indexer/ package)
     "KOW_INDEX_DB": "~/.local/share/kowalski/index.db",

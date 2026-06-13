@@ -34,6 +34,15 @@ def build_default_registry(
     registry.register_all(reminders.build_tools(scheduler))
     _register_mail_tools(registry, config, store)
 
+    from .convsearch import ConversationSearch  # noqa: F401  (kept local to bootstrap)
+    from .tools.search import build_conversation_search_tools, build_search_tools
+
+    registry.register_all(build_search_tools(config))
+    registry.register_all(build_conversation_search_tools(store))
+
+    if config.get_bool("KOW_MEMORY"):
+        _register_memory(registry, config, store)
+
     try:
         import kowindex.api  # noqa: F401
     except ImportError:
@@ -77,6 +86,24 @@ def build_default_registry(
     if config.get_bool("KOW_RECIPES"):
         _register_recipe_tools(registry, config, scheduler)
     return registry
+
+
+def _register_memory(registry: ToolRegistry, config: Config, store: Store) -> None:
+    """Register memory.*/profile.* tools and attach a MemoryContextProvider to
+    the registry so the agent loop can inject profile + recalled memories."""
+    from .memory.context import MemoryContextProvider
+    from .memory.embedder import OllamaEmbedder
+    from .memory.store import MemoryStore
+    from .tools.memory import build_memory_tools
+
+    embedder = OllamaEmbedder(
+        config.get("OLLAMA_HOST"), config.get("KOW_EMBED_MODEL", "nomic-embed-text")
+    )
+    memory_store = MemoryStore(store)
+    registry.register_all(build_memory_tools(memory_store, embedder))
+    registry.context_provider = MemoryContextProvider(
+        memory_store, embedder, k=config.get_int("KOW_MEMORY_RECALL_K")
+    )
 
 
 def _register_recipe_tools(
