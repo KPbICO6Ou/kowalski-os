@@ -24,6 +24,11 @@ def main(argv: list[str] | None = None) -> int:
     ask.add_argument("--model", help="override OLLAMA_MODEL")
     ask.add_argument("--yes", action="store_true", help="auto-approve confirmations (not destructive)")
     ask.add_argument("--json", action="store_true", help="emit raw events as JSON lines")
+    ask.add_argument(
+        "--plan",
+        action="store_true",
+        help="plan-then-execute: decompose the goal into steps before acting",
+    )
     ask.add_argument("-c", "--conversation", help="conversation ID to continue")
     ask.add_argument(
         "--continue",
@@ -77,8 +82,17 @@ def _build_runtime(confirmer):
 async def cmd_ask(args) -> int:
     import uuid
 
-    from .agent.events import DoneEvent, ErrorEvent, TokenEvent, ToolCallEvent, ToolResultEvent
+    from .agent.events import (
+        DoneEvent,
+        ErrorEvent,
+        PlanEvent,
+        PlanStepEvent,
+        TokenEvent,
+        ToolCallEvent,
+        ToolResultEvent,
+    )
     from .agent.loop import AgentLoop
+    from .agent.planner import Planner
     from .bootstrap import build_llm
     from .conversations import ConversationStore, run_turn
     from .policy import AutoConfirm, InteractiveCliConfirmation
@@ -100,20 +114,44 @@ async def cmd_ask(args) -> int:
 
     scheduler.start()
     llm = build_llm(config, model_override=args.model or "")
-    loop = AgentLoop(
-        llm,
-        registry,
-        max_iterations=config.get_int("KOW_MAX_ITERATIONS"),
-        context_provider=getattr(registry, "context_provider", None),
-    )
+    context_provider = getattr(registry, "context_provider", None)
+
+    if args.plan:
+        planner = Planner(
+            llm,
+            registry,
+            max_iterations_per_step=config.get_int("KOW_MAX_ITERATIONS"),
+            context_provider=context_provider,
+        )
+        events = _run_planner_turn(
+            planner, args.prompt, conversation_id, conversations
+        )
+    else:
+        loop = AgentLoop(
+            llm,
+            registry,
+            max_iterations=config.get_int("KOW_MAX_ITERATIONS"),
+            context_provider=context_provider,
+        )
+        events = run_turn(loop, args.prompt, conversation_id, conversations)
 
     exit_code = 0
     try:
-        async for event in run_turn(loop, args.prompt, conversation_id, conversations):
+        async for event in events:
             if args.json:
                 print(json.dumps(event.to_dict(), ensure_ascii=False), flush=True)
                 continue
-            if isinstance(event, TokenEvent):
+            if isinstance(event, PlanEvent):
+                print("Plan:")
+                for k, step in enumerate(event.steps, start=1):
+                    print(f"  {k}. {step}")
+            elif isinstance(event, PlanStepEvent):
+                k, total = event.index + 1, event.total
+                if event.status == "start":
+                    print(f"\n▶ step {k}/{total}: {event.description}")
+                else:
+                    print(f"{DIM}✓ step {k}/{total}{RESET}")
+            elif isinstance(event, TokenEvent):
                 print(event.text, end="", flush=True)
             elif isinstance(event, ToolCallEvent):
                 print(f"\n{DIM}→ {event.tool}({json.dumps(event.args, ensure_ascii=False)}){RESET}")
@@ -134,6 +172,27 @@ async def cmd_ask(args) -> int:
         scheduler.shutdown()
         store.close()
     return exit_code
+
+
+async def _run_planner_turn(planner, prompt, conversation_id, conversations):
+    """Drive a Planner.run while persisting the conversation like run_turn.
+
+    The planner manages its own per-step history internally, so we only persist
+    the original user prompt and the final synthesized assistant answer."""
+    from .agent.events import DoneEvent
+
+    if conversations is not None:
+        conversations.touch(conversation_id, title_hint=prompt)
+        conversations.append(conversation_id, "user", prompt)
+
+    answer = None
+    async for event in planner.run(prompt, conversation_id=conversation_id):
+        if isinstance(event, DoneEvent):
+            answer = event.answer
+        yield event
+
+    if conversations is not None and answer is not None:
+        conversations.append(conversation_id, "assistant", answer)
 
 
 def cmd_tools_list(args) -> int:

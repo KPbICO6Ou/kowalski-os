@@ -49,3 +49,17 @@ class DoneEvent(AgentEvent):
 @dataclass
 class ErrorEvent(AgentEvent):
     message: str
+
+
+@dataclass
+class PlanEvent(AgentEvent):
+    goal: str
+    steps: list[str]
+
+
+@dataclass
+class PlanStepEvent(AgentEvent):
+    index: int
+    total: int
+    description: str
+    status: str  # "start" | "done"

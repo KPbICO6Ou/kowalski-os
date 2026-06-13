@@ -13,7 +13,8 @@ ollama pull qwen2.5:14b        # or 7b on smaller hardware
 ## CLI
 
 ```bash
-kow ask "find PDFs from the last week"     # one-shot, no daemon
+kow ask "find PDFs from the last week"     # one-shot, no daemon (ReAct loop)
+kow ask --plan "research X, then write Y"   # plan-then-execute for multi-step goals
 kow ask --yes --json "..."                 # auto-confirm + JSON event stream
 kow ask --continue "and the largest one?"  # follow-up in the most recent conversation
 kow ask -c <ID> "..."                      # follow-up in a specific conversation
@@ -25,6 +26,13 @@ kow journal tail [-n 50]
 Conversations persist final user/assistant turns in SQLite; follow-ups (same
 `conversation_id` over IPC, or `-c`/`--continue` in the CLI) see prior turns.
 The socket op `{"op": "conversations"}` returns the recent conversation list.
+
+By default `ask` runs the streaming ReAct loop (think/act/observe until done).
+`--plan` switches to **plan-then-execute**: a planner first decomposes the goal
+into an explicit ordered step list (`Plan:` …), then runs each step as its own
+short loop turn — threading each step's result into the next — and finishes with
+a synthesis turn that produces the final answer. Use it for complex multi-step
+goals where an upfront plan helps; leave it off for quick single-shot asks.
 
 ## Config `~/.config/kowalski/kowalski.conf` (KEY=VALUE, env overrides file)
 
