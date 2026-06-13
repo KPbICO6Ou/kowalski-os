@@ -80,6 +80,14 @@ def test_risk_is_destructive(tmp_path: Path):
     assert tool.risk == RiskLevel.DESTRUCTIVE
 
 
+def test_danger_check_wired(tmp_path: Path):
+    tool = _tool(tmp_path)
+    assert tool.danger_check is not None
+    assert tool.danger_check({"command": "rm -rf /"}) is not None
+    assert tool.danger_check({"command": "ls -la"}) is None
+    assert tool.danger_check({}) is None  # missing command -> no crash
+
+
 async def test_secret_env_not_leaked_to_command(tmp_path, monkeypatch):
     """A secret in the agent's environment must not reach the executed command
     (the sandbox isolates fs/network; env must be scrubbed too)."""

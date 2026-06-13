@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
-from kowalski.policy import Decision, SecurityPolicy
+from kowalski.policy import AutoConfirm, AutoDeny, ConfirmRequest, Decision, SecurityPolicy
 from kowalski.tools.base import RiskLevel, ToolDef, ToolResult
 
 
@@ -82,3 +82,26 @@ def test_symlink_escape_denied(policy: SecurityPolicy, tmp_path: Path):
     evil.symlink_to("/etc")
     decision, _ = policy.evaluate(make_tool(RiskLevel.WRITE), {"path": str(evil / "passwd")})
     assert decision == Decision.DENY
+
+
+def _req(risk: RiskLevel, dangerous: bool = False) -> ConfirmRequest:
+    return ConfirmRequest(tool="t", args={}, risk=risk, reason="r", dangerous=dangerous)
+
+
+async def test_autoconfirm_approves_read_write_network():
+    auto = AutoConfirm()
+    assert await auto.confirm(_req(RiskLevel.READ)) is True
+    assert await auto.confirm(_req(RiskLevel.WRITE)) is True
+    assert await auto.confirm(_req(RiskLevel.NETWORK)) is True
+
+
+async def test_autoconfirm_refuses_destructive_and_dangerous():
+    auto = AutoConfirm()
+    assert await auto.confirm(_req(RiskLevel.DESTRUCTIVE)) is False
+    assert await auto.confirm(_req(RiskLevel.WRITE, dangerous=True)) is False
+
+
+async def test_autodeny_refuses_everything():
+    deny = AutoDeny()
+    assert await deny.confirm(_req(RiskLevel.READ)) is False
+    assert await deny.confirm(_req(RiskLevel.WRITE)) is False

@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from ..journal import ActionJournal
 from ..policy import ConfirmationProvider, ConfirmRequest, Decision, SecurityPolicy
-from .base import InvalidToolArgsError, ToolDef, ToolResult, UnknownToolError
+from .base import InvalidToolArgsError, RiskLevel, ToolDef, ToolResult, UnknownToolError
 
 
 class ToolRegistry:
@@ -22,12 +22,14 @@ class ToolRegistry:
         journal: ActionJournal,
         confirmer: ConfirmationProvider,
         tool_timeout: float = 30.0,
+        dry_run: bool = False,
     ):
         self._tools: dict[str, ToolDef] = {}
         self.policy = policy
         self.journal = journal
         self.confirmer = confirmer
         self.tool_timeout = tool_timeout
+        self.dry_run = dry_run
 
     def register(self, tool: ToolDef) -> None:
         if tool.name in self._tools:
@@ -83,7 +85,28 @@ class ToolRegistry:
             raise InvalidToolArgsError(name, str(exc), tool.input_schema) from exc
 
         clean_args = parsed.model_dump()
+
+        # Dry-run: preview mutating actions without confirming or executing them.
+        # READ tools still run so the agent can gather the info it needs to plan.
+        if self.dry_run and tool.risk != RiskLevel.READ:
+            self.journal.record(
+                tool=name, args=clean_args, risk=tool.risk, decision="dry_run",
+                conversation_id=conversation_id,
+            )
+            return ToolResult(
+                ok=True,
+                content=f"[dry-run] would call {name}({clean_args})",
+                data={"dry_run": True, "tool": name, "args": clean_args},
+            )
+
         decision, reason = self.policy.evaluate(tool, clean_args)
+
+        # Content-aware danger check: if it fires, force a human confirmation
+        # regardless of what the policy decided (e.g. `rm -rf` via system.run).
+        danger_reason = tool.danger_check(clean_args) if tool.danger_check else None
+        if danger_reason:
+            decision = Decision.CONFIRM
+            reason = danger_reason
 
         if decision == Decision.DENY:
             self.journal.record(
@@ -94,12 +117,15 @@ class ToolRegistry:
 
         if decision == Decision.CONFIRM:
             approved = await self.confirmer.confirm(
-                ConfirmRequest(tool=name, args=clean_args, risk=tool.risk, reason=reason)
+                ConfirmRequest(
+                    tool=name, args=clean_args, risk=tool.risk, reason=reason,
+                    dangerous=danger_reason is not None, danger_reason=danger_reason,
+                )
             )
             if not approved:
                 self.journal.record(
                     tool=name, args=clean_args, risk=tool.risk, decision="denied_by_user",
-                    conversation_id=conversation_id,
+                    conversation_id=conversation_id, error=danger_reason,
                 )
                 return ToolResult(ok=False, content="Denied by user.")
 

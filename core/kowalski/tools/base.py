@@ -34,6 +34,10 @@ class ToolDef:
     risk: RiskLevel
     handler: Callable[..., Awaitable[ToolResult]]  # handler(args: BaseModel) -> ToolResult
     path_fields: tuple[str, ...] = field(default=())  # arg names holding filesystem paths
+    # Optional content-aware danger check. Given the parsed args dict, returns a
+    # human-readable danger reason or None. When it fires, the registry forces a
+    # confirmation (even under --yes) — it flags, it never hard-blocks.
+    danger_check: Callable[[dict[str, Any]], str | None] | None = None
 
     @property
     def input_schema(self) -> dict[str, Any]:

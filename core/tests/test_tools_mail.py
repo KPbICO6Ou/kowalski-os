@@ -44,6 +44,24 @@ def drafts(tmp_store) -> DraftStore:
     return DraftStore(tmp_store)
 
 
+class _AlwaysConfirm:
+    """A human who approves everything, including DESTRUCTIVE. AutoConfirm no
+    longer does this (it refuses DESTRUCTIVE/dangerous), so the send tests that
+    want to exercise the post-confirmation path use this instead."""
+
+    async def confirm(self, request) -> bool:
+        return True
+
+
+@pytest.fixture
+def confirm_registry(policy, journal):
+    from kowalski.tools.registry import ToolRegistry
+
+    return ToolRegistry(
+        policy=policy, journal=journal, confirmer=_AlwaysConfirm(), tool_timeout=5.0
+    )
+
+
 async def test_search_substring_and_format(backend, drafts):
     t = tool(backend, drafts, "mail.search")
     args = t.args_model(query="budget")
@@ -97,8 +115,10 @@ async def test_draft_persists(backend, drafts, tmp_store):
     assert row["sent"] == 0
 
 
-async def test_send_from_draft_auto_confirm(backend, drafts, registry, tmp_store):
-    # mail.draft + mail.send go through the AutoConfirm registry (execute choke point)
+async def test_send_from_draft_auto_confirm(backend, drafts, confirm_registry, tmp_store):
+    # mail.send is DESTRUCTIVE: it always reaches the confirm gate. Here the
+    # human approves, so it proceeds (AutoConfirm/--yes would refuse it).
+    registry = confirm_registry
     registry.register_all(build_tools(backend, drafts))
     draft_res = await registry.execute(
         "mail.draft",
@@ -125,7 +145,8 @@ async def test_send_blocked_by_auto_deny(backend, drafts, deny_registry, journal
     assert row["sent"] == 0
 
 
-async def test_send_inline(backend, drafts, registry):
+async def test_send_inline(backend, drafts, confirm_registry):
+    registry = confirm_registry
     registry.register_all(build_tools(backend, drafts))
     result = await registry.execute(
         "mail.send",
@@ -136,7 +157,8 @@ async def test_send_inline(backend, drafts, registry):
     assert backend.sent[0].to == ["carol@example.com"]
 
 
-async def test_send_missing_draft_fails_cleanly(backend, drafts, registry):
+async def test_send_missing_draft_fails_cleanly(backend, drafts, confirm_registry):
+    registry = confirm_registry
     registry.register_all(build_tools(backend, drafts))
     result = await registry.execute("mail.send", {"draft_id": 4242})
     assert not result.ok

@@ -28,6 +28,8 @@ class ConfirmRequest:
     args: dict[str, Any]
     risk: RiskLevel
     reason: str
+    dangerous: bool = False
+    danger_reason: str | None = None
     id: str = dc_field(default_factory=lambda: uuid.uuid4().hex)
 
 
@@ -37,7 +39,13 @@ class ConfirmationProvider(ABC):
 
 
 class AutoConfirm(ConfirmationProvider):
+    """The `kow ask --yes` path: auto-approves routine actions (read/write/
+    network) but NEVER an irreversible DESTRUCTIVE action or a command flagged
+    as dangerous — those still need a real human."""
+
     async def confirm(self, request: ConfirmRequest) -> bool:
+        if request.risk == RiskLevel.DESTRUCTIVE or request.dangerous:
+            return False
         return True
 
 

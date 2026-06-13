@@ -15,6 +15,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from ..config import Config
+from ..safety import classify_command
 from ..sandbox import RunResult, SandboxRunner, default_runner
 from .base import RiskLevel, ToolDef, ToolResult
 
@@ -114,5 +115,6 @@ def build_shell_tools(config: Config, runner: SandboxRunner | None = None) -> li
             risk=RiskLevel.DESTRUCTIVE,
             handler=system_run,
             path_fields=("cwd",),
+            danger_check=lambda args: classify_command(args.get("command", "")),
         ),
     ]
