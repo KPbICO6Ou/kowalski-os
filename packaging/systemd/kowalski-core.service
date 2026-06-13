@@ -1,10 +1,12 @@
 [Unit]
 Description=Kowalski OS agent core daemon
-ConditionPathExists=%h/.local/bin/kow
+# This unit ships in the kowalski-core .deb, which installs the launcher at
+# /usr/bin/kow (a symlink into the bundled venv).
+ConditionPathExists=/usr/bin/kow
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/kow serve
+ExecStart=/usr/bin/kow serve
 Restart=on-failure
 RestartSec=3
 Environment=PYTHONUNBUFFERED=1
