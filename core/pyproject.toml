@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.6",
     "apscheduler>=3.10,<4",
     "psutil>=5.9",
+    "pyyaml>=6",
 ]
 
 [project.optional-dependencies]
