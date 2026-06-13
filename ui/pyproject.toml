@@ -14,6 +14,7 @@ dependencies = [
 
 [project.scripts]
 kow-omni = "kowui.app:main"
+kow-clip = "kowui.clipboard:main"
 
 [tool.setuptools.packages.find]
 include = ["kowui*"]
