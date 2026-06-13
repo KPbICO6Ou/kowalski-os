@@ -99,7 +99,7 @@ O Kowalski OS tem um único "cérebro" — o serviço `kow-core` — com o qual 
 | `provision/` | scripts que instalam o sistema inteiro em uma máquina nova |
 | `packaging/` | os pacotes `.deb` e o tema do desktop |
 
-Mais detalhes: [Arquitetura](docs/architecture.md) · [Instalando em uma máquina](docs/provisioning.md) · [Empacotamento](docs/packaging.md).
+Mais detalhes: [Arquitetura](docs/ARCHITECTURE.md) · [Instalando em uma máquina](docs/PROVISIONING.md) · [Empacotamento](docs/PACKAGING.md).
 
 ### Estado do projeto
 

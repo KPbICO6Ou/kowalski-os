@@ -99,7 +99,7 @@ kow serve                 # run it as a background service for the desktop apps
 | `provision/` | скрипты, устанавливающие всю систему на чистую машину |
 | `packaging/` | пакеты `.deb` и тема оформления рабочего стола |
 
-Подробнее: [Архитектура](docs/architecture.md) · [Установка на машину](docs/provisioning.md) · [Упаковка](docs/packaging.md).
+Подробнее: [Архитектура](docs/ARCHITECTURE.md) · [Установка на машину](docs/PROVISIONING.md) · [Упаковка](docs/PACKAGING.md).
 
 ### Статус проекта
 

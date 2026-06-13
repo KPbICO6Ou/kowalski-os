@@ -93,7 +93,7 @@ or droppable into `/etc/xdg/autostart` + `/usr/share/kowalski/`):
 
 The bootable `kowalski-os-<ver>-<arch>.iso` is produced from the Ubuntu 24.04
 Server ISO via the autoinstall flow already in `provision/` (see
-[provisioning.md](provisioning.md)) — `cloud-init` does an unattended install and
+[PROVISIONING.md](PROVISIONING.md)) — `cloud-init` does an unattended install and
 the first-boot `ansible-pull` provisions drivers/CUDA/Docker/Ollama/XFCE and
 installs the kowalski `.deb`. Two build paths:
 

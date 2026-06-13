@@ -99,7 +99,7 @@ Kowalski OS hat ein einziges "Gehirn" — den `kow-core`-Dienst — mit dem jede
 | `provision/` | Skripte, die das gesamte System auf einem frischen Rechner installieren |
 | `packaging/` | die `.deb`-Pakete und das Desktop-Theme |
 
-Mehr Details: [Architecture](docs/architecture.md) · [Installing on a machine](docs/provisioning.md) · [Packaging](docs/packaging.md).
+Mehr Details: [Architecture](docs/ARCHITECTURE.md) · [Installing on a machine](docs/PROVISIONING.md) · [Packaging](docs/PACKAGING.md).
 
 ### Projektstatus
 

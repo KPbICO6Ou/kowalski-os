@@ -99,7 +99,7 @@ Kowalski OS에는 하나의 "두뇌" — `kow-core` 서비스 — 가 있으며,
 | `provision/` | 전체 시스템을 새 컴퓨터에 설치하는 스크립트 |
 | `packaging/` | `.deb` 패키지와 데스크톱 테마 |
 
-더 자세히: [Architecture](docs/architecture.md) · [Installing on a machine](docs/provisioning.md) · [Packaging](docs/packaging.md).
+더 자세히: [Architecture](docs/ARCHITECTURE.md) · [Installing on a machine](docs/PROVISIONING.md) · [Packaging](docs/PACKAGING.md).
 
 ### 프로젝트 상태
 

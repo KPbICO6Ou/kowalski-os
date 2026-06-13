@@ -99,7 +99,7 @@ Kowalski OS has one "brain" — the `kow-core` service — that every interface 
 | `provision/` | scripts that install the whole system onto a fresh machine |
 | `packaging/` | the `.deb` packages and the desktop theme |
 
-More detail: [Architecture](docs/architecture.md) · [Installing on a machine](docs/provisioning.md) · [Packaging](docs/packaging.md).
+More detail: [Architecture](docs/ARCHITECTURE.md) · [Installing on a machine](docs/PROVISIONING.md) · [Packaging](docs/PACKAGING.md).
 
 ### Project status
 

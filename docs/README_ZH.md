@@ -99,7 +99,7 @@ Kowalski OS 有一个“大脑”——`kow-core` 服务——每一个界面都
 | `provision/` | 把整个系统安装到一台全新机器上的脚本 |
 | `packaging/` | `.deb` 软件包和桌面主题 |
 
-更多细节：[Architecture](docs/architecture.md) · [Installing on a machine](docs/provisioning.md) · [Packaging](docs/packaging.md)。
+更多细节：[Architecture](docs/ARCHITECTURE.md) · [Installing on a machine](docs/PROVISIONING.md) · [Packaging](docs/PACKAGING.md)。
 
 ### 项目状态
 
