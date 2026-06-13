@@ -42,6 +42,24 @@ DEFAULTS: dict[str, str] = {
     "KOW_API_ENABLED": "0",
     "KOW_API_PORT": "8377",
     "KOW_LOG_LEVEL": "INFO",
+    # Mail backend: "mock" (in-memory, no creds — safe dev default) or "imap"
+    # (real IMAP/SMTP; requires the 'mail' extra and the keys below)
+    "KOW_MAIL_BACKEND": "mock",
+    # IMAP (incoming) — secrets belong in the 0600 kowalski.conf, not env/shell
+    # history; for Gmail/Outlook use an app-password, not your account password
+    "IMAP_HOST": "",
+    "IMAP_PORT": "993",
+    "IMAP_USER": "",
+    "IMAP_PASSWORD": "",
+    "IMAP_SSL": "1",
+    # SMTP (outgoing) — same advice: keep SMTP_PASSWORD in the 0600 conf file
+    "SMTP_HOST": "",
+    "SMTP_PORT": "587",
+    "SMTP_USER": "",
+    "SMTP_PASSWORD": "",
+    "SMTP_TLS": "1",
+    # From address for sent mail; empty falls back to SMTP_USER
+    "MAIL_FROM": "",
 }
 
 

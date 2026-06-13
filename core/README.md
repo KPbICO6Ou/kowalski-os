@@ -50,6 +50,12 @@ The socket op `{"op": "conversations"}` returns the recent conversation list.
 | `KOW_SOCKET_PATH` | `$XDG_RUNTIME_DIR/kowalski.sock` | unix-socket IPC |
 | `KOW_IPC` | auto | `socket` / `dbus` |
 | `KOW_API_ENABLED` / `KOW_API_PORT` | `0` / `8377` | debug REST API |
+| `KOW_MAIL_BACKEND` | `mock` | `mock` (in-memory, no creds) or `imap` (real IMAP/SMTP, needs the `mail` extra) |
+| `IMAP_HOST` / `IMAP_PORT` / `IMAP_SSL` | — / `993` / `1` | incoming IMAP server |
+| `IMAP_USER` / `IMAP_PASSWORD` | — | IMAP login — keep secrets in the 0600 conf; use an app-password |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_TLS` | — / `587` / `1` | outgoing SMTP server |
+| `SMTP_USER` / `SMTP_PASSWORD` | — | SMTP login — keep secrets in the 0600 conf; use an app-password |
+| `MAIL_FROM` | — | From address for sent mail; empty falls back to `SMTP_USER` |
 
 ## Tools (MVP)
 
@@ -65,6 +71,10 @@ The socket op `{"op": "conversations"}` returns the recent conversation list.
 | `reminders.list` | read | pending reminders ordered by due time; `include_done` adds delivered/missed |
 | `reminders.cancel` | write | cancel a pending reminder: removes the scheduled job and the row |
 | `fs.*` (13 tools) | read/write/destructive | pydantic-ai-toolbox FilesystemToolset: read_file, grep, glob, list_dir, stat (read); write/append/copy/move/mkdir (write); delete_* (destructive) — sandboxed at the first allowed path |
+| `mail.search` | read | search the mailbox by substring over subject/sender/snippet |
+| `mail.read` | read | read one message by id (headers + body text) |
+| `mail.draft` | write | compose and save a local email draft (the AI writes the body); returns a draft id |
+| `mail.send` | destructive | send a draft (`draft_id`) or inline (`to`/`subject`/`body`) — irreversible, so **always confirmed** and never auto-allowed |
 
 Risk levels: read → executes; write → allowed inside the allowlist, otherwise
 confirmation; destructive → always confirmation; network → confirmation

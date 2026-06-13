@@ -63,6 +63,14 @@ def test_network_auto_allow(tmp_path: Path):
     assert decision == Decision.ALLOW
 
 
+def test_destructive_confirms_even_with_auto_allow_network(tmp_path: Path):
+    # mail.send is DESTRUCTIVE: an irreversible outbound send must always be
+    # confirmed, never silenced by KOW_AUTO_ALLOW_NETWORK.
+    policy = SecurityPolicy(allowed_paths=[tmp_path], auto_allow_network=True)
+    decision, _ = policy.evaluate(make_tool(RiskLevel.DESTRUCTIVE), {})
+    assert decision == Decision.CONFIRM
+
+
 def test_forbidden_root_denied(policy: SecurityPolicy):
     decision, reason = policy.evaluate(make_tool(RiskLevel.WRITE), {"path": "/etc/passwd"})
     assert decision == Decision.DENY

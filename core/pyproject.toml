@@ -18,6 +18,8 @@ dependencies = [
 [project.optional-dependencies]
 api = ["fastapi>=0.110", "uvicorn>=0.29"]
 dbus = ["dasbus>=1.7"]
+# KOW_MAIL_BACKEND=imap: real IMAP search/read + SMTP send (untested in CI)
+mail = ["imap-tools>=1.5", "aiosmtplib>=3.0"]
 # KOW_LLM=pydantic-ai transport + fs.*/system.* tools from pydantic-ai-toolbox
 pydantic-ai = ["pydantic-ai-slim[openai]>=1.0", "pydantic-ai-toolbox>=0.0.2"]
 

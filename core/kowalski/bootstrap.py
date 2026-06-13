@@ -7,7 +7,7 @@ from .journal import ActionJournal
 from .policy import ConfirmationProvider, SecurityPolicy
 from .scheduler import ReminderScheduler
 from .store import Store
-from .tools import apps, files, notes, reminders, system
+from .tools import apps, files, mail, notes, reminders, system
 from .tools.registry import ToolRegistry
 
 
@@ -32,6 +32,7 @@ def build_default_registry(
     registry.register_all(files.build_tools(config.allowed_paths))
     registry.register_all(notes.build_tools(store))
     registry.register_all(reminders.build_tools(scheduler))
+    _register_mail_tools(registry, config, store)
 
     try:
         import kowindex.api  # noqa: F401
@@ -61,6 +62,29 @@ def build_default_registry(
         except ImportError:
             pass  # pydantic-ai-toolbox not installed — system.* host-info tools absent
     return registry
+
+
+def _register_mail_tools(registry: ToolRegistry, config: Config, store: Store) -> None:
+    """Build the mail backend per KOW_MAIL_BACKEND and register mail.* tools.
+
+    mock (default) → empty in-memory inbox so the capability exists in dev.
+    imap → real IMAP/SMTP; if its optional deps aren't importable we skip the
+    mail tools entirely rather than crash the daemon.
+    """
+    from .mail.drafts import DraftStore
+
+    backend_kind = config.get("KOW_MAIL_BACKEND", "mock").lower()
+    if backend_kind == "imap":
+        from .mail.imap_smtp import ImapSmtpBackend
+
+        if not ImapSmtpBackend.importable():
+            return  # 'mail' extra not installed — mail tools simply absent
+        backend = ImapSmtpBackend(config)
+    else:
+        from .mail.mock import MockMailBackend
+
+        backend = MockMailBackend()
+    registry.register_all(mail.build_tools(backend, DraftStore(store)))
 
 
 def build_llm(config: Config, model_override: str = ""):
