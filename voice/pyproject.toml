@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kowalski-voice"
+version = "0.1.0"
+description = "Kowalski OS voice pipeline: wake word -> STT -> agent -> TTS, with barge-in"
+requires-python = ">=3.12"
+license = {text = "Apache-2.0"}
+dependencies = [
+    "kowalski",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+# Microphone / wake word / VAD / playback stack — Linux desktop, not run in CI.
+mic = ["sounddevice>=0.4", "numpy>=1.26", "openwakeword>=0.6"]
+
+[project.scripts]
+kow-voice = "kowvoice.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["kowvoice*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

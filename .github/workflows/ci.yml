@@ -21,6 +21,7 @@ jobs:
           .venv/bin/pip install -e "core[api,pydantic-ai]" -e setup
           .venv/bin/pip install -e ui
           .venv/bin/pip install -e indexer
+          .venv/bin/pip install -e voice
           .venv/bin/pip install pytest-asyncio httpx
       - name: Lint
         run: make lint

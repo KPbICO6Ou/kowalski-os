@@ -4,7 +4,7 @@ BIN := $(VENV)/bin
 PLAYBOOK := provision/site.yml
 INVENTORY := provision/inventories/local/hosts.yml
 
-.PHONY: venv lint syntax test test-core test-setup test-ui test-indexer test-provision test-provision-fast clean
+.PHONY: venv lint syntax test test-core test-setup test-ui test-indexer test-voice test-provision test-provision-fast clean
 
 venv:
 	$(PYTHON) -m venv $(VENV)
@@ -14,12 +14,12 @@ venv:
 lint:
 	$(BIN)/yamllint .
 	$(BIN)/ansible-lint provision
-	$(BIN)/ruff check core setup ui indexer
+	$(BIN)/ruff check core setup ui indexer voice
 
 syntax:
 	$(BIN)/ansible-playbook --syntax-check $(PLAYBOOK) -i $(INVENTORY)
 
-test: test-core test-setup test-ui test-indexer
+test: test-core test-setup test-ui test-indexer test-voice
 
 test-core:
 	$(BIN)/pytest core/tests -q
@@ -32,6 +32,9 @@ test-ui:
 
 test-indexer:
 	$(BIN)/pytest indexer/tests -q
+
+test-voice:
+	$(BIN)/pytest voice/tests -q
 
 test-provision:
 	docker build -t kowalski-provision-test provision/test
