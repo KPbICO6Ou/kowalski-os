@@ -25,6 +25,8 @@ answers.yaml
 
 # Claude Code session artifacts (agent worktrees etc.)
 .claude/
+# Local Claude working notes (not shared)
+CLAUDE.md
 
 # Editors
 .idea/
