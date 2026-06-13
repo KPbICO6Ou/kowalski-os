@@ -15,6 +15,7 @@ ollama pull qwen2.5:14b        # or 7b on smaller hardware
 ```bash
 kow ask "find PDFs from the last week"     # one-shot, no daemon (ReAct loop)
 kow ask --plan "research X, then write Y"   # plan-then-execute for multi-step goals
+kow ask --dry-run "tidy my Downloads"       # preview: mutating tools reported, not run
 kow ask --yes --json "..."                 # auto-confirm + JSON event stream
 kow ask --continue "and the largest one?"  # follow-up in the most recent conversation
 kow ask -c <ID> "..."                      # follow-up in a specific conversation
@@ -69,6 +70,11 @@ goals where an upfront plan helps; leave it off for quick single-shot asks.
 | `KOW_SHELL` / `KOW_SHELL_TIMEOUT` | `1` / `30` | sandboxed shell `system.run` |
 | `KOW_RECIPES` / `KOW_RECIPES_DIR` | `1` / `~/.config/kowalski/recipes` | YAML automation recipes |
 | `KOW_MEMORY` / `KOW_MEMORY_RECALL_K` | `1` / `5` | long-term memory + profile injection into the system prompt |
+| `KOW_SUMMARIZE` / `KOW_SUMMARIZE_AFTER` / `KOW_SUMMARIZE_KEEP` | `1` / `24` / `8` | fold old turns of a long conversation into a rolling digest |
+| `KOW_PLUGINS_DIR` | `~/.config/kowalski/plugins` | folder of `*.py` plugins exporting `TOOLS: list[ToolDef]` |
+| `KOW_CHECKLIST` | `1` | visible checklist tools (`plan.create/update/show`) |
+| `KOW_MCP_SERVERS` | — | external MCP servers `name=cmd args;…` (needs the `mcp` package) |
+| `KOW_HEARTBEAT` / `KOW_HEARTBEAT_INTERVAL_MIN` | `0` / `30` | proactive periodic check-in (off by default) |
 
 ## Tools (MVP)
 

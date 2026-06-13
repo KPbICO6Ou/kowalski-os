@@ -40,13 +40,33 @@ async def run_daemon(api: bool = False) -> int:
         )
 
     conversations = ConversationStore(store)
-    service = AgentService(loop_factory, registry, confirmations, conversations=conversations)
+    if config.get_bool("KOW_SUMMARIZE"):
+        summarize_after = config.get_int("KOW_SUMMARIZE_AFTER")
+        keep = config.get_int("KOW_SUMMARIZE_KEEP")
+    else:
+        summarize_after, keep = 10**9, 8
+    service = AgentService(
+        loop_factory, registry, confirmations, conversations=conversations,
+        summarize_after=summarize_after, keep=keep,
+    )
     ipc_server = make_ipc_server(config, service)
 
     scheduler.start()
     recipe_engine = getattr(registry, "recipe_engine", None)
     if recipe_engine is not None:
         recipe_engine.arm_all()  # re-arm saved time/interval/inotify recipes
+
+    heartbeat = None
+    if config.get_bool("KOW_HEARTBEAT"):
+        from .heartbeat import HeartbeatService
+
+        heartbeat = HeartbeatService(
+            loop_factory,
+            interval_min=config.get_int("KOW_HEARTBEAT_INTERVAL_MIN"),
+            scheduler=scheduler.aps,
+        )
+        heartbeat.start()
+
     tasks = [asyncio.create_task(ipc_server.serve(), name="ipc")]
 
     if api or config.get_bool("KOW_API_ENABLED"):

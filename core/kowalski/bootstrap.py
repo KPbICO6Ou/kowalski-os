@@ -85,7 +85,32 @@ def build_default_registry(
         registry.register_all(build_shell_tools(config))
     if config.get_bool("KOW_RECIPES"):
         _register_recipe_tools(registry, config, scheduler)
+
+    if config.get_bool("KOW_CHECKLIST"):
+        from .tools.checklist import build_checklist_tools
+
+        registry.register_all(build_checklist_tools())
+
+    _register_plugins(registry, config)
+
+    from .tools.mcp import build_mcp_tools
+
+    registry.register_all(build_mcp_tools(config))
     return registry
+
+
+def _register_plugins(registry: ToolRegistry, config: Config) -> None:
+    """Load user plugin tools from KOW_PLUGINS_DIR (default ~/.config/kowalski/plugins)."""
+    from pathlib import Path
+
+    from .plugins import DEFAULT_PLUGINS_DIR, load_plugin_tools
+
+    plugins_dir = (
+        Path(config.get("KOW_PLUGINS_DIR")).expanduser()
+        if config.get("KOW_PLUGINS_DIR")
+        else DEFAULT_PLUGINS_DIR
+    )
+    registry.register_all(load_plugin_tools(plugins_dir))
 
 
 def _register_memory(registry: ToolRegistry, config: Config, store: Store) -> None:

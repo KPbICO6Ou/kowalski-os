@@ -78,16 +78,23 @@ class AgentService:
         registry: ToolRegistry,
         confirmations: PendingQueueConfirmation,
         conversations: ConversationStore | None = None,
+        summarize_after: int = 24,
+        keep: int = 8,
     ):
         self._loop_factory = loop_factory
         self.registry = registry
         self.confirmations = confirmations
         self.conversations = conversations
+        self._summarize_after = summarize_after
+        self._keep = keep
 
     async def ask(self, prompt: str, conversation_id: str | None = None) -> AsyncIterator[AgentEvent]:
         agent_loop: AgentLoop = self._loop_factory()
         conversation_id = conversation_id or uuid.uuid4().hex
-        async for event in run_turn(agent_loop, prompt, conversation_id, self.conversations):
+        async for event in run_turn(
+            agent_loop, prompt, conversation_id, self.conversations,
+            summarize_after=self._summarize_after, keep=self._keep,
+        ):
             yield event
 
     def confirm(self, request_id: str, approved: bool) -> bool:

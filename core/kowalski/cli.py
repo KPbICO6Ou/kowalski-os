@@ -29,6 +29,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="plan-then-execute: decompose the goal into steps before acting",
     )
+    ask.add_argument(
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        help="preview: mutating tools are not executed, only reported",
+    )
     ask.add_argument("-c", "--conversation", help="conversation ID to continue")
     ask.add_argument(
         "--continue",
@@ -66,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     return 1
 
 
-def _build_runtime(confirmer):
+def _build_runtime(confirmer, dry_run: bool = False):
     """Config -> store -> scheduler -> registry, shared by ask/serve/tools."""
     from .bootstrap import build_default_registry
     from .scheduler import ReminderScheduler
@@ -76,7 +82,19 @@ def _build_runtime(confirmer):
     store = Store(config.get_path("KOW_DB_PATH"))
     scheduler = ReminderScheduler(store)
     registry = build_default_registry(config, store, scheduler, confirmer)
+    if dry_run:
+        registry.dry_run = True
     return config, store, scheduler, registry
+
+
+def _summarize_kwargs(config) -> dict:
+    """run_turn summarisation params from config (off => never trigger)."""
+    if not config.get_bool("KOW_SUMMARIZE"):
+        return {"summarize_after": 10**9}
+    return {
+        "summarize_after": config.get_int("KOW_SUMMARIZE_AFTER"),
+        "keep": config.get_int("KOW_SUMMARIZE_KEEP"),
+    }
 
 
 async def cmd_ask(args) -> int:
@@ -98,7 +116,7 @@ async def cmd_ask(args) -> int:
     from .policy import AutoConfirm, InteractiveCliConfirmation
 
     confirmer = AutoConfirm() if args.yes else InteractiveCliConfirmation()
-    config, store, scheduler, registry = _build_runtime(confirmer)
+    config, store, scheduler, registry = _build_runtime(confirmer, dry_run=args.dry_run)
     conversations = ConversationStore(store)
 
     conversation_id = args.conversation
@@ -133,7 +151,9 @@ async def cmd_ask(args) -> int:
             max_iterations=config.get_int("KOW_MAX_ITERATIONS"),
             context_provider=context_provider,
         )
-        events = run_turn(loop, args.prompt, conversation_id, conversations)
+        events = run_turn(
+            loop, args.prompt, conversation_id, conversations, **_summarize_kwargs(config)
+        )
 
     exit_code = 0
     try:

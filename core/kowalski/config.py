@@ -38,6 +38,20 @@ DEFAULTS: dict[str, str] = {
     # injection of profile facts + recalled memories into the system prompt
     "KOW_MEMORY": "1",
     "KOW_MEMORY_RECALL_K": "5",
+    # Long-conversation auto-summarisation: fold turns older than KEEP into a
+    # rolling digest once a conversation exceeds AFTER messages
+    "KOW_SUMMARIZE": "1",
+    "KOW_SUMMARIZE_AFTER": "24",
+    "KOW_SUMMARIZE_KEEP": "8",
+    # Plugin folder: *.py exporting `TOOLS: list[ToolDef]`; empty = ~/.config/kowalski/plugins
+    "KOW_PLUGINS_DIR": "",
+    # Visible checklist tools (plan.create/update/show) for multi-step work
+    "KOW_CHECKLIST": "1",
+    # External MCP servers: "name=cmd arg arg;name2=cmd2 ..." (needs the `mcp` package)
+    "KOW_MCP_SERVERS": "",
+    # Proactive heartbeat: periodic agent check-in (OFF by default — autonomy)
+    "KOW_HEARTBEAT": "0",
+    "KOW_HEARTBEAT_INTERVAL_MIN": "30",
     "KOW_DB_PATH": "~/.local/share/kowalski/kowalski.db",
     # semantic index database built by kow-index (the indexer/ package)
     "KOW_INDEX_DB": "~/.local/share/kowalski/index.db",

@@ -236,6 +236,25 @@ mbsync/notmuch backend, GTK-клиент, mail-tools, AI-драфты.
 
 Итого: ~4–5 месяцев соло в спокойном темпе; MVP (фазы 0–1) — за месяц.
 
+### Заимствования из ARIA (zeequxz/aria-desktop-assistant) — сделано
+Денилист опасных команд + фикс дыры `--yes` (AutoConfirm больше не одобряет
+DESTRUCTIVE/опасное); `--dry-run` (превью без выполнения мутирующих tools);
+авто-суммаризация длинных диалогов; плагин-папка (`KOW_PLUGINS_DIR`); видимый
+чек-лист `plan.*`; MCP-клиент (`KOW_MCP_SERVERS`); watcher буфера обмена
+`kow-clip`; Heartbeat (проактивный чек-ин, off по умолчанию).
+
+### Роадмап — кандидаты из ARIA v2 (особенно для API/облака)
+- **Run-движок с учётом токенов/стоимости, бюджетом и отменой** — каждый прогон
+  (turn/задача/делегирование) как инспектируемая запись; важно для платных
+  провайдеров через pydantic-ai (KOW_PAI_MODEL).
+- **Eval-харнесс** — golden-задачи со скорингом (contains/regex/used_tool/
+  created_file/no_error), pass-rate во времени; ловит регрессии tool-calling
+  локальных моделей. Запуск gated, как integration-тесты.
+- **Персоны/специализированные агенты** + per-agent tool-scopes и выбор модели
+  (`kow ask --agent researcher`); опирается на per-tool ask/allow/deny.
+Дальше по желанию: dry-run как настоящий CoW-overlay с diff+commit; авто-роутинг
+дешёвая/сильная модель; секреты в keyring; self-improvement из истории прогонов.
+
 ---
 
 ## 5. Железо и VRAM-бюджет (важно)
