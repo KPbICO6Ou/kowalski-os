@@ -29,9 +29,11 @@ class ConversationStore:
             title = title_hint.strip().splitlines()[0][:TITLE_MAX_CHARS] or None
         self.conn.execute(
             """
-            INSERT INTO conversations (id, title) VALUES (?, ?)
+            INSERT INTO conversations (id, title, activity)
+            VALUES (?, ?, (SELECT COALESCE(MAX(activity), 0) + 1 FROM conversations))
             ON CONFLICT(id) DO UPDATE SET
                 updated_ts = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                activity = (SELECT COALESCE(MAX(activity), 0) + 1 FROM conversations),
                 title = COALESCE(conversations.title, excluded.title)
             """,
             (conversation_id, title),
@@ -44,7 +46,9 @@ class ConversationStore:
             (conversation_id, role, content),
         )
         self.conn.execute(
-            "UPDATE conversations SET updated_ts = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
+            "UPDATE conversations SET"
+            " updated_ts = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),"
+            " activity = (SELECT COALESCE(MAX(activity), 0) + 1 FROM conversations)"
             " WHERE id = ?",
             (conversation_id,),
         )
@@ -61,7 +65,7 @@ class ConversationStore:
 
     def last_conversation_id(self) -> str | None:
         row = self.conn.execute(
-            "SELECT id FROM conversations ORDER BY COALESCE(updated_ts, created_ts) DESC LIMIT 1"
+            "SELECT id FROM conversations ORDER BY activity DESC LIMIT 1"
         ).fetchone()
         return row["id"] if row else None
 
@@ -71,7 +75,7 @@ class ConversationStore:
             SELECT c.id, c.title, c.created_ts, c.updated_ts,
                    (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS messages
             FROM conversations c
-            ORDER BY COALESCE(c.updated_ts, c.created_ts) DESC
+            ORDER BY c.activity DESC
             LIMIT ?
             """,
             (limit,),

@@ -39,7 +39,10 @@ CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
     created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_ts TEXT,
-    title TEXT
+    title TEXT,
+    -- monotonic recency counter: ordering by updated_ts alone is ambiguous when
+    -- several conversations are touched within the same millisecond
+    activity INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
