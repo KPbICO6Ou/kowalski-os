@@ -12,8 +12,19 @@ from typing import Any
 from .agent.events import AgentEvent, DoneEvent
 from .agent.loop import AgentLoop
 from .store import Store
+from .summarizer import summarize_messages
 
 TITLE_MAX_CHARS = 60
+
+# Defaults used when the integrator has not wired config keys yet. Once a
+# conversation holds more than `SUMMARIZE_AFTER` stored messages, the turns
+# older than the most recent `KEEP_RECENT` are folded into a summary.
+SUMMARIZE_AFTER = 24
+KEEP_RECENT = 8
+
+# Synthetic message carrying the rolling digest of older turns. Stored as a
+# `user` role because the messages CHECK constraint only allows user/assistant.
+SUMMARY_PREFIX = "[Earlier conversation summary]\n"
 
 
 class ConversationStore:
@@ -21,6 +32,17 @@ class ConversationStore:
 
     def __init__(self, store: Store):
         self.conn = store.conn
+        self._ensure_summary_column()
+
+    def _ensure_summary_column(self) -> None:
+        """Idempotent migration: add the `summary` column if it is missing."""
+        try:
+            self.conn.execute("ALTER TABLE conversations ADD COLUMN summary TEXT")
+            self.conn.commit()
+        except Exception:
+            # Column already exists (or the table is being shared concurrently);
+            # the ALTER is the migration and re-running it is a no-op for us.
+            pass
 
     def touch(self, conversation_id: str, title_hint: str | None = None) -> None:
         """Upsert a conversation; the title comes from the first prompt."""
@@ -63,6 +85,27 @@ class ConversationStore:
         ).fetchall()
         return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
 
+    def message_count(self, conversation_id: str) -> int:
+        row = self.conn.execute(
+            "SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?",
+            (conversation_id,),
+        ).fetchone()
+        return int(row["n"]) if row else 0
+
+    def get_summary(self, conversation_id: str) -> str | None:
+        row = self.conn.execute(
+            "SELECT summary FROM conversations WHERE id = ?",
+            (conversation_id,),
+        ).fetchone()
+        return row["summary"] if row and row["summary"] else None
+
+    def set_summary(self, conversation_id: str, text: str) -> None:
+        self.conn.execute(
+            "UPDATE conversations SET summary = ? WHERE id = ?",
+            (text, conversation_id),
+        )
+        self.conn.commit()
+
     def last_conversation_id(self) -> str | None:
         row = self.conn.execute(
             "SELECT id FROM conversations ORDER BY activity DESC LIMIT 1"
@@ -83,20 +126,70 @@ class ConversationStore:
         return [dict(r) for r in rows]
 
 
+async def _effective_history(
+    agent_loop: AgentLoop,
+    conversations: ConversationStore,
+    conversation_id: str,
+    summarize_after: int,
+    keep: int,
+) -> list[dict[str, Any]]:
+    """History with older turns folded into a rolling summary.
+
+    When the stored message count exceeds `summarize_after`, the turns older
+    than the most recent `keep` are summarised (merged with any prior summary)
+    and persisted, so the next turn starts from the digest. The returned list
+    is the synthetic summary message (if any) followed by the kept turns."""
+    count = conversations.message_count(conversation_id)
+    summary = conversations.get_summary(conversation_id)
+
+    if count > summarize_after:
+        # Pull everything, split off the turns to compress from the kept tail.
+        full = conversations.history(conversation_id, max_messages=count)
+        older = full[:-keep] if keep > 0 else full
+        if older:
+            excerpt = older
+            if summary:
+                excerpt = [
+                    {"role": "user", "content": SUMMARY_PREFIX + summary},
+                    *older,
+                ]
+            new_summary = await summarize_messages(agent_loop.llm, excerpt)
+            if new_summary:
+                summary = new_summary
+                conversations.set_summary(conversation_id, summary)
+
+    recent = conversations.history(conversation_id, max_messages=keep)
+    effective: list[dict[str, Any]] = []
+    if summary:
+        effective.append({"role": "user", "content": SUMMARY_PREFIX + summary})
+    effective.extend(recent)
+    return effective
+
+
 async def run_turn(
     agent_loop: AgentLoop,
     prompt: str,
     conversation_id: str,
     conversations: ConversationStore | None,
+    *,
+    summarize_after: int = SUMMARIZE_AFTER,
+    keep: int = KEEP_RECENT,
 ) -> AsyncIterator[AgentEvent]:
     """Run one agent turn, loading prior history and persisting the new turns.
 
     The user prompt is persisted up front; the assistant turn only when the
-    stream ends with a DoneEvent (errors keep just the user turn)."""
+    stream ends with a DoneEvent (errors keep just the user turn).
+
+    Long conversations are auto-summarised: turns older than `keep` are folded
+    into a rolling digest once the stored message count exceeds
+    `summarize_after`. Both thresholds default to safe values and can be
+    overridden by the integrator (KOW_SUMMARIZE_AFTER / KOW_SUMMARIZE_KEEP)."""
     history = None
     if conversations is not None:
         conversations.touch(conversation_id, title_hint=prompt)
-        history = conversations.history(conversation_id)
+        history = await _effective_history(
+            agent_loop, conversations, conversation_id, summarize_after, keep
+        )
         conversations.append(conversation_id, "user", prompt)
 
     answer: str | None = None
