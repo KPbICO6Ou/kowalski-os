@@ -28,8 +28,11 @@ class ShellRunArgs(BaseModel):
         default=None,
         description="Working directory (must be inside an allowed path); default: first allowed path",
     )
-    timeout: float = Field(
-        default=30.0, gt=0, le=MAX_TIMEOUT, description="Seconds before the command is killed"
+    timeout: float | None = Field(
+        default=None,
+        gt=0,
+        le=MAX_TIMEOUT,
+        description="Seconds before the command is killed; omit to use the configured default",
     )
 
 
@@ -77,7 +80,7 @@ def build_shell_tools(config: Config, runner: SandboxRunner | None = None) -> li
         if not cwd.is_dir():
             return ToolResult(ok=False, content=f"Working directory does not exist: {cwd}")
 
-        timeout = min(args.timeout, MAX_TIMEOUT)
+        timeout = min(args.timeout or default_timeout, MAX_TIMEOUT)
         result = await runner.run(args.command, cwd=str(cwd), timeout=timeout)
 
         data = {

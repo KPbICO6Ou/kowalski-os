@@ -78,3 +78,30 @@ async def test_output_truncation(tmp_path: Path):
 def test_risk_is_destructive(tmp_path: Path):
     tool = _tool(tmp_path)
     assert tool.risk == RiskLevel.DESTRUCTIVE
+
+
+async def test_secret_env_not_leaked_to_command(tmp_path, monkeypatch):
+    """A secret in the agent's environment must not reach the executed command
+    (the sandbox isolates fs/network; env must be scrubbed too)."""
+    from kowalski.config import Config
+    from kowalski.tools.shell import build_shell_tools, ShellRunArgs
+
+    monkeypatch.setenv("IMAP_PASSWORD", "super-secret-token")
+    config = Config({"KOW_ALLOWED_PATHS": str(tmp_path)})
+    tool = build_shell_tools(config)[0]
+    result = await tool.handler(ShellRunArgs(command="echo PW=[$IMAP_PASSWORD]", cwd=str(tmp_path)))
+    assert result.ok
+    assert "super-secret-token" not in result.data["stdout"]
+    assert "PW=[]" in result.data["stdout"]
+
+
+async def test_configured_default_timeout_applies(tmp_path):
+    from kowalski.config import Config
+    from kowalski.tools.shell import build_shell_tools, ShellRunArgs
+
+    config = Config({"KOW_ALLOWED_PATHS": str(tmp_path), "KOW_SHELL_TIMEOUT": "0.2"})
+    tool = build_shell_tools(config)[0]
+    # no explicit timeout -> uses the configured 0.2s default -> times out
+    result = await tool.handler(ShellRunArgs(command="sleep 5", cwd=str(tmp_path)))
+    assert not result.ok
+    assert result.data["timed_out"] is True

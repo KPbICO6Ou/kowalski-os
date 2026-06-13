@@ -5,6 +5,12 @@ confirmation prompt and action journal apply to each call exactly as for a
 direct tool invocation. A recipe containing a destructive (or out-of-allowlist
 write / network) step therefore prompts for confirmation AT RUN TIME, when the
 step executes — recipes do not bypass any safeguard.
+
+Consequence for unattended (time/interval/inotify) triggers: a confirm-requiring
+step fired with no client connected has nobody to approve it, so it waits out
+KOW_CONFIRM_TIMEOUT and is then denied, stopping the recipe. This is deliberate
+fail-closed behaviour — autonomous recipes can only complete chains of
+auto-allowed (read / in-allowlist write) steps.
 """
 
 from __future__ import annotations

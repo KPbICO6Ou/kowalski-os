@@ -34,6 +34,20 @@ logger = logging.getLogger("kowalski.sandbox")
 MAX_OUTPUT_BYTES = 64 * 1024
 TRUNCATION_MARKER = "\n... [output truncated]"
 
+# Only these environment variables are exposed to a command by default. The
+# agent's process environment may hold secrets (Ollama/API tokens, IMAP/SMTP
+# passwords); inheriting it wholesale would leak them into every command and
+# defeat the sandbox, which otherwise isolates only the filesystem and network.
+_SAFE_ENV_KEYS = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TZ", "USER")
+
+
+def _minimal_env(override: dict[str, str] | None) -> dict[str, str]:
+    if override is not None:
+        return override
+    env = {k: os.environ[k] for k in _SAFE_ENV_KEYS if k in os.environ}
+    env.setdefault("PATH", "/usr/bin:/bin")
+    return env
+
 
 @dataclass
 class RunResult:
@@ -118,7 +132,7 @@ class PlainRunner:
         proc = await asyncio.create_subprocess_shell(
             command,
             cwd=cwd,
-            env=env,
+            env=_minimal_env(env),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             start_new_session=True,
@@ -205,10 +219,13 @@ class BubblewrapRunner:
             argv = self._bwrap_argv(command, cwd)
         else:
             argv = self._firejail_argv(command, cwd)
+        # Minimal env so the sandbox does not leak the agent's secrets; bwrap
+        # passes its own environment through to the child, so setting it here is
+        # sufficient (no parent env reaches the sandboxed command).
         proc = await asyncio.create_subprocess_exec(
             *argv,
             cwd=cwd,
-            env=env,
+            env=_minimal_env(env),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             start_new_session=True,
