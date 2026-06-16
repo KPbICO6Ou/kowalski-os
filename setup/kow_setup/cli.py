@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yaml
 
@@ -86,6 +87,16 @@ def _default_mode(service: str, current: dict) -> str:
     return "r" if current.get(SERVICE_URL_KEY[service]) else "s"
 
 
+def _suggested_host(raw: dict, current: dict) -> str:
+    """Host to pre-fill STT/TTS with — the same box as Ollama (services are
+    usually co-located): the just-entered Ollama URL, else the configured one."""
+    ollama = raw.get("ollama") or {}
+    url = (ollama.get("url") if ollama.get("mode") == "remote" else "") or current.get(
+        "OLLAMA_HOST", ""
+    )
+    return (urlparse(url).hostname or "") if url else ""
+
+
 def ask_interactively(current: dict | None = None) -> dict:
     """Interactive wizard. `current` (the existing config) pre-fills the prompts
     so pressing Enter keeps the configured value."""
@@ -99,9 +110,12 @@ def ask_interactively(current: dict | None = None) -> dict:
         if not mode.startswith("r"):
             raw[service] = {"mode": "skip"}
             continue
-        raw[service] = (
-            ask_ollama(current) if service == "ollama" else ask_http_service(service, current)
-        )
+        if service == "ollama":
+            raw[service] = ask_ollama(current)
+        else:
+            raw[service] = ask_http_service(
+                service, current, default_host=_suggested_host(raw, current)
+            )
 
     voice = ask_voice(current)
     if voice:
@@ -109,21 +123,23 @@ def ask_interactively(current: dict | None = None) -> dict:
     return raw
 
 
-def ask_http_service(service: str, current: dict | None = None) -> dict:
+def ask_http_service(service: str, current: dict | None = None, default_host: str = "") -> dict:
     """Prompt for an STT/TTS remote endpoint, probe it, and on a failed check
-    show the error and offer to re-enter / skip / keep anyway."""
+    show the error and offer to re-enter / skip / keep anyway. The prompt's
+    default is the configured URL, else <default_host>:<service default port>."""
     current = current or {}
     cur_url = current.get(SERVICE_URL_KEY[service], "")
     cur_token = current.get(f"{service.upper()}_TOKEN", "")
     port = SERVICE_DEFAULT_PORT[service]
+    default_url = cur_url or (f"{default_host}:{port}" if default_host else "")
     from .checks import check_stt, check_tts  # imported here so tests can patch them
 
     checker = check_stt if service == "stt" else check_tts
     while True:
         raw_url = input(
-            f"  {service} URL (host[:port], default port {port}){_hint(cur_url)}: "
+            f"  {service} URL (host[:port], default port {port}){_hint(default_url)}: "
         ).strip()
-        url = normalize_url(raw_url or cur_url, port)
+        url = normalize_url(raw_url or default_url, port)
         if not url:
             print("  (please enter a URL)")
             continue

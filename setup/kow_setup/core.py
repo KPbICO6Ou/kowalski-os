@@ -16,7 +16,7 @@ SERVICES = ("ollama", "stt", "tts")
 WAKE_MODES = ("push_to_talk", "wake_word", "both")
 OLLAMA_DEFAULT_PORT = 11434
 # Per-service default port appended when the user gives a host with no port.
-SERVICE_DEFAULT_PORT = {"ollama": OLLAMA_DEFAULT_PORT, "stt": 5099, "tts": 5000}
+SERVICE_DEFAULT_PORT = {"ollama": OLLAMA_DEFAULT_PORT, "stt": 5051, "tts": 5052}
 
 
 def normalize_url(url: str, default_port: int) -> str:

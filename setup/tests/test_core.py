@@ -119,7 +119,7 @@ def test_parse_answers_normalizes_stt_tts_urls():
         }
     )
     assert answers["stt"].url == "http://10.16.69.251:5051"  # scheme added (the reported bug)
-    assert answers["tts"].url == "http://10.16.69.251:5000"  # default tts port
+    assert answers["tts"].url == "http://10.16.69.251:5052"  # default tts port
 
 
 def test_write_config_writes_without_running_checks(tmp_path: Path):

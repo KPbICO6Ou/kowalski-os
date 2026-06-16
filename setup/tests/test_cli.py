@@ -134,7 +134,43 @@ def test_ask_http_service_adds_default_port(mock_tts, monkeypatch):
     mock_tts.return_value = CheckResult(service="tts", ok=True, latency_ms=2)
     monkeypatch.setattr(builtins, "input", _inputs(["10.16.69.251", ""]))
     entry = cli.ask_http_service("tts")
-    assert entry["url"] == "http://10.16.69.251:5000"
+    assert entry["url"] == "http://10.16.69.251:5052"  # tts default port
+
+
+def test_suggested_host_from_ollama_answer():
+    raw = {"ollama": {"mode": "remote", "url": "http://10.16.69.251:11434"}}
+    assert cli._suggested_host(raw, {}) == "10.16.69.251"
+
+
+def test_suggested_host_falls_back_to_current():
+    assert cli._suggested_host({}, {"OLLAMA_HOST": "http://10.0.0.5:11434"}) == "10.0.0.5"
+
+
+def test_suggested_host_empty_when_unknown():
+    assert cli._suggested_host({}, {}) == ""
+
+
+@patch("kow_setup.checks.check_stt")
+def test_ask_http_service_suggests_ollama_host_and_port(mock_stt, monkeypatch):
+    # blank URL accepts the suggested <ollama host>:<stt default port 5051>
+    mock_stt.return_value = CheckResult(service="stt", ok=True, latency_ms=1)
+    monkeypatch.setattr(builtins, "input", _inputs(["", "", ""]))
+    entry = cli.ask_http_service("stt", default_host="10.16.69.251")
+    assert entry["url"] == "http://10.16.69.251:5051"
+
+
+@patch("kow_setup.checks.check_tts")
+def test_ask_http_service_suggested_url_in_prompt(mock_tts, monkeypatch):
+    mock_tts.return_value = CheckResult(service="tts", ok=True, latency_ms=1)
+    seen = []
+
+    def recording_input(prompt=""):
+        seen.append(prompt)
+        return ""
+
+    monkeypatch.setattr(builtins, "input", recording_input)
+    cli.ask_http_service("tts", default_host="10.16.69.251")
+    assert "10.16.69.251:5052" in seen[0]  # address shown in the URL prompt
 
 
 @patch("kow_setup.checks.check_stt")
