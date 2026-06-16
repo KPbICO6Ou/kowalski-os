@@ -156,17 +156,23 @@ def ask_http_service(service: str, current: dict | None = None, default_host: st
             ).strip() or cur_lang
             if language:
                 entry["language"] = language
-        result = checker(url, token or cur_token or None)
-        if result.ok:
-            print(f"  [OK] {url} — {result.latency_ms} ms")
-            return entry
-        print(f"  [FAIL] {url} — {result.error}")
-        decision = input("  [r]e-enter / [s]kip this service / keep [a]nyway? [r] ").strip().lower()
-        if decision.startswith("s"):
-            return {"mode": "skip"}
-        if decision.startswith("a"):
-            return entry
-        # default: re-enter (loop)
+        fix = False
+        while not fix:  # re-validate the SAME entry — this is "retry"
+            result = checker(url, token or cur_token or None)
+            if result.ok:
+                print(f"  [OK] {url} — {result.latency_ms} ms")
+                return entry
+            print(f"  [FAIL] {url} — {result.error}")
+            decision = input(
+                "  [r]etry / [f]ix / [s]kip this service / keep [a]nyway? [r] "
+            ).strip().lower()
+            if decision.startswith("s"):
+                return {"mode": "skip"}
+            if decision.startswith("a"):
+                return entry
+            if decision.startswith("f"):
+                fix = True  # break out to re-enter the settings (outer loop)
+            # else (blank or "r"): retry — re-probe the same entry
 
 
 def ask_ollama(current: dict | None = None) -> dict:

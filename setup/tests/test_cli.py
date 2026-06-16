@@ -188,14 +188,29 @@ def test_ask_http_service_blank_keeps_url_and_token(mock_stt, monkeypatch):
 
 
 @patch("kow_setup.checks.check_tts")
-def test_ask_http_service_reenter_after_failed_check(mock_tts, monkeypatch):
-    # bad port fails the probe -> [r]e-enter (blank default) -> good port passes
+def test_ask_http_service_retry_revalidates_same_url(mock_tts, monkeypatch):
+    # 'r' (blank default) re-probes the SAME url without re-entering it.
+    mock_tts.side_effect = [
+        CheckResult(service="tts", ok=False, error="starting up"),
+        CheckResult(service="tts", ok=True, latency_ms=3),
+    ]
+    # url, token, decision="" (retry) -> re-probe same -> OK
+    monkeypatch.setattr(builtins, "input", _inputs(["10.16.69.251:5052", "", ""]))
+    entry = cli.ask_http_service("tts")
+    assert entry["url"] == "http://10.16.69.251:5052"  # unchanged
+    assert mock_tts.call_count == 2
+
+
+@patch("kow_setup.checks.check_tts")
+def test_ask_http_service_fix_re_enters_settings(mock_tts, monkeypatch):
+    # 'f' goes back to re-enter the URL; the corrected one passes.
     mock_tts.side_effect = [
         CheckResult(service="tts", ok=False, error="Connection refused"),
         CheckResult(service="tts", ok=True, latency_ms=3),
     ]
+    # url1, token1, decision="f", url2, token2
     monkeypatch.setattr(
-        builtins, "input", _inputs(["10.16.69.251:5052", "", "", "10.16.69.251:5000", ""])
+        builtins, "input", _inputs(["10.16.69.251:5052", "", "f", "10.16.69.251:5000", ""])
     )
     entry = cli.ask_http_service("tts")
     assert entry["url"] == "http://10.16.69.251:5000"
