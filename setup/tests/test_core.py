@@ -10,6 +10,7 @@ from kow_setup.core import (
     normalize_url,
     parse_answers,
     run,
+    write_config,
 )
 
 
@@ -119,6 +120,24 @@ def test_parse_answers_normalizes_stt_tts_urls():
     )
     assert answers["stt"].url == "http://10.16.69.251:5051"  # scheme added (the reported bug)
     assert answers["tts"].url == "http://10.16.69.251:5000"  # default tts port
+
+
+def test_write_config_writes_without_running_checks(tmp_path: Path):
+    # No check_* is patched: if write_config ran network checks this would hang
+    # or fail. It must just build + write the already-validated answers.
+    conf = tmp_path / "k.conf"
+    updates = write_config(
+        {
+            "ollama": {"mode": "remote", "url": "10.0.0.5"},
+            "tts": {"mode": "remote", "url": "10.0.0.5:5052"},
+            "voice": {"wake_mode": "both"},
+        },
+        conf,
+    )
+    assert updates["OLLAMA_HOST"] == "http://10.0.0.5:11434"
+    assert updates["TTS_URL"] == "http://10.0.0.5:5052"
+    content = conf.read_text()
+    assert "KOW_WAKE_MODE=both" in content
 
 
 def test_build_voice_updates_maps_keys():

@@ -151,3 +151,15 @@ def run(raw_answers: dict, config_path: Path, accept_warnings: bool = False) -> 
     if updates:
         write_conf(config_path, updates)
     return 0, results
+
+
+def write_config(raw_answers: dict, config_path: Path) -> dict[str, str]:
+    """Write config from answers that were ALREADY validated (the interactive
+    wizard probes each service inline), so no gating checks run here. Returns the
+    updates written."""
+    answers = parse_answers(raw_answers)
+    updates = build_config_updates(answers)
+    updates.update(build_voice_updates(raw_answers))
+    if updates:
+        write_conf(config_path, updates)
+    return updates

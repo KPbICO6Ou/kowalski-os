@@ -10,7 +10,14 @@ import yaml
 
 from . import __version__
 from .config import read_conf
-from .core import SERVICE_DEFAULT_PORT, SERVICES, normalize_ollama_url, normalize_url, run
+from .core import (
+    SERVICE_DEFAULT_PORT,
+    SERVICES,
+    normalize_ollama_url,
+    normalize_url,
+    run,
+    write_config,
+)
 
 DEFAULT_CONFIG = Path("~/.config/kowalski/kowalski.conf").expanduser()
 
@@ -33,9 +40,22 @@ def main(argv: list[str] | None = None) -> int:
         if not args.answers:
             parser.error("--non-interactive requires --answers FILE")
         raw = yaml.safe_load(args.answers.read_text()) or {}
-    else:
-        raw = ask_interactively(read_conf(args.config))
+        return _run_non_interactive(raw, args)
 
+    # Interactive: the wizard probes each service and lets you re-enter on a
+    # failed check, so there is no separate gating pass — write what was
+    # validated inline.
+    raw = ask_interactively(read_conf(args.config))
+    updates = write_config(raw, args.config)
+    if updates:
+        print(f"\nconfig written: {args.config}")
+    else:
+        print("\nno changes (all services skipped)")
+    return 0
+
+
+def _run_non_interactive(raw: dict, args) -> int:
+    """Answers-file path: checks gate the write (no human to re-prompt)."""
     try:
         code, results = run(raw, args.config, accept_warnings=args.accept_warnings)
     except NotImplementedError as exc:
@@ -90,25 +110,47 @@ def ask_interactively(current: dict | None = None) -> dict:
 
 
 def ask_http_service(service: str, current: dict | None = None) -> dict:
-    """Prompt for an STT/TTS remote endpoint (URL + optional token/language)."""
+    """Prompt for an STT/TTS remote endpoint, probe it, and on a failed check
+    show the error and offer to re-enter / skip / keep anyway."""
     current = current or {}
     cur_url = current.get(SERVICE_URL_KEY[service], "")
+    cur_token = current.get(f"{service.upper()}_TOKEN", "")
     port = SERVICE_DEFAULT_PORT[service]
-    raw_url = input(f"  {service} URL (host[:port], default port {port}){_hint(cur_url)}: ").strip()
-    url = normalize_url(raw_url or cur_url, port)
-    entry: dict = {"mode": "remote", "url": url}
-    # A blank token leaves any configured token untouched (write_conf preserves it).
-    has_token = bool(current.get(f"{service.upper()}_TOKEN"))
-    token_prompt = "  token (blank = keep current): " if has_token else "  token (optional): "
-    token = input(token_prompt).strip()
-    if token:
-        entry["token"] = token
-    if service == "stt":
-        cur_lang = current.get("STT_LANGUAGE", "")
-        language = input(f"  language (ru/en/auto, optional){_hint(cur_lang)}: ").strip() or cur_lang
-        if language:
-            entry["language"] = language
-    return entry
+    from .checks import check_stt, check_tts  # imported here so tests can patch them
+
+    checker = check_stt if service == "stt" else check_tts
+    while True:
+        raw_url = input(
+            f"  {service} URL (host[:port], default port {port}){_hint(cur_url)}: "
+        ).strip()
+        url = normalize_url(raw_url or cur_url, port)
+        if not url:
+            print("  (please enter a URL)")
+            continue
+        # A blank token leaves any configured token untouched (write_conf keeps it).
+        token_prompt = "  token (blank = keep current): " if cur_token else "  token (optional): "
+        token = input(token_prompt).strip()
+        entry: dict = {"mode": "remote", "url": url}
+        if token:
+            entry["token"] = token
+        if service == "stt":
+            cur_lang = current.get("STT_LANGUAGE", "")
+            language = input(
+                f"  language (ru/en/auto, optional){_hint(cur_lang)}: "
+            ).strip() or cur_lang
+            if language:
+                entry["language"] = language
+        result = checker(url, token or cur_token or None)
+        if result.ok:
+            print(f"  [OK] {url} — {result.latency_ms} ms")
+            return entry
+        print(f"  [FAIL] {url} — {result.error}")
+        decision = input("  [r]e-enter / [s]kip this service / keep [a]nyway? [r] ").strip().lower()
+        if decision.startswith("s"):
+            return {"mode": "skip"}
+        if decision.startswith("a"):
+            return entry
+        # default: re-enter (loop)
 
 
 def ask_ollama(current: dict | None = None) -> dict:

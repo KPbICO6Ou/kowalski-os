@@ -106,21 +106,28 @@ def test_ask_ollama_blank_keeps_current_url_and_model(mock_check, monkeypatch):
     mock_check.assert_called_once_with("http://10.0.0.9:11434")
 
 
-def test_ask_http_service_normalizes_schemeless_url(monkeypatch):
+@patch("kow_setup.checks.check_stt")
+def test_ask_http_service_normalizes_schemeless_url(mock_stt, monkeypatch):
     # The reported bug: 'host:port' with no scheme must become a valid http URL.
+    mock_stt.return_value = CheckResult(service="stt", ok=True, latency_ms=5)
     monkeypatch.setattr(builtins, "input", _inputs(["10.16.69.251:5051", "", "ru"]))
     entry = cli.ask_http_service("stt")
     assert entry["url"] == "http://10.16.69.251:5051"
     assert entry["language"] == "ru"
+    mock_stt.assert_called_once()
 
 
-def test_ask_http_service_adds_default_port(monkeypatch):
+@patch("kow_setup.checks.check_tts")
+def test_ask_http_service_adds_default_port(mock_tts, monkeypatch):
+    mock_tts.return_value = CheckResult(service="tts", ok=True, latency_ms=2)
     monkeypatch.setattr(builtins, "input", _inputs(["10.16.69.251", ""]))
     entry = cli.ask_http_service("tts")
     assert entry["url"] == "http://10.16.69.251:5000"
 
 
-def test_ask_http_service_blank_keeps_url_and_token(monkeypatch):
+@patch("kow_setup.checks.check_stt")
+def test_ask_http_service_blank_keeps_url_and_token(mock_stt, monkeypatch):
+    mock_stt.return_value = CheckResult(service="stt", ok=True, latency_ms=1)
     current = {"STT_URL": "http://10.16.69.251:5099", "STT_TOKEN": "secret", "STT_LANGUAGE": "ru"}
     # blank url -> keep; blank token -> keep (not re-emitted); blank language -> keep
     monkeypatch.setattr(builtins, "input", _inputs(["", "", ""]))
@@ -128,6 +135,38 @@ def test_ask_http_service_blank_keeps_url_and_token(monkeypatch):
     assert entry["url"] == "http://10.16.69.251:5099"
     assert entry["language"] == "ru"
     assert "token" not in entry  # blank leaves the stored token untouched
+    # the stored token is still used for the probe
+    assert mock_stt.call_args.args[1] == "secret"
+
+
+@patch("kow_setup.checks.check_tts")
+def test_ask_http_service_reenter_after_failed_check(mock_tts, monkeypatch):
+    # bad port fails the probe -> [r]e-enter (blank default) -> good port passes
+    mock_tts.side_effect = [
+        CheckResult(service="tts", ok=False, error="Connection refused"),
+        CheckResult(service="tts", ok=True, latency_ms=3),
+    ]
+    monkeypatch.setattr(
+        builtins, "input", _inputs(["10.16.69.251:5052", "", "", "10.16.69.251:5000", ""])
+    )
+    entry = cli.ask_http_service("tts")
+    assert entry["url"] == "http://10.16.69.251:5000"
+    assert mock_tts.call_count == 2
+
+
+@patch("kow_setup.checks.check_tts")
+def test_ask_http_service_skip_after_failed_check(mock_tts, monkeypatch):
+    mock_tts.return_value = CheckResult(service="tts", ok=False, error="refused")
+    monkeypatch.setattr(builtins, "input", _inputs(["10.16.69.251:5052", "", "s"]))
+    assert cli.ask_http_service("tts") == {"mode": "skip"}
+
+
+@patch("kow_setup.checks.check_tts")
+def test_ask_http_service_keep_anyway_after_failed_check(mock_tts, monkeypatch):
+    mock_tts.return_value = CheckResult(service="tts", ok=False, error="refused")
+    monkeypatch.setattr(builtins, "input", _inputs(["10.16.69.251:5052", "", "a"]))
+    entry = cli.ask_http_service("tts")
+    assert entry == {"mode": "remote", "url": "http://10.16.69.251:5052"}
 
 
 def test_ask_voice_blank_keeps_current(monkeypatch):
