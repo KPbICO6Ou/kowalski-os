@@ -38,9 +38,28 @@ def main(argv: list[str] | None = None) -> int:
     ask.add_argument("-c", "--conversation", help="conversation ID to continue")
     ask.add_argument(
         "--continue",
+        "--resume",
         dest="continue_",
         action="store_true",
-        help="continue the most recent conversation",
+        help="continue the most recent conversation (--resume is an alias)",
+    )
+
+    chat = sub.add_parser("chat", help="interactive REPL (stays open, one conversation)")
+    chat.add_argument("--model", help="override OLLAMA_MODEL")
+    chat.add_argument("--yes", action="store_true", help="auto-approve confirmations (not destructive)")
+    chat.add_argument(
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        help="preview: mutating tools are not executed, only reported",
+    )
+    chat.add_argument("-c", "--conversation", help="resume a specific conversation ID")
+    chat.add_argument(
+        "--continue",
+        "--resume",
+        dest="continue_",
+        action="store_true",
+        help="resume the most recent conversation (--resume is an alias)",
     )
 
     serve = sub.add_parser("serve", help="run the kow-core daemon")
@@ -60,6 +79,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "ask":
         return asyncio.run(cmd_ask(args))
+    if args.command == "chat":
+        return asyncio.run(cmd_chat(args))
     if args.command == "serve":
         from .daemon import run_daemon
 
@@ -97,9 +118,8 @@ def _summarize_kwargs(config) -> dict:
     }
 
 
-async def cmd_ask(args) -> int:
-    import uuid
-
+def _print_event(event, json_mode: bool = False) -> bool:
+    """Render one agent event to stdout. Returns True if it was an error."""
     from .agent.events import (
         DoneEvent,
         ErrorEvent,
@@ -109,6 +129,38 @@ async def cmd_ask(args) -> int:
         ToolCallEvent,
         ToolResultEvent,
     )
+
+    if json_mode:
+        print(json.dumps(event.to_dict(), ensure_ascii=False), flush=True)
+        return isinstance(event, ErrorEvent)
+    if isinstance(event, PlanEvent):
+        print("Plan:")
+        for k, step in enumerate(event.steps, start=1):
+            print(f"  {k}. {step}")
+    elif isinstance(event, PlanStepEvent):
+        k, total = event.index + 1, event.total
+        if event.status == "start":
+            print(f"\n▶ step {k}/{total}: {event.description}")
+        else:
+            print(f"{DIM}✓ step {k}/{total}{RESET}")
+    elif isinstance(event, TokenEvent):
+        print(event.text, end="", flush=True)
+    elif isinstance(event, ToolCallEvent):
+        print(f"\n{DIM}→ {event.tool}({json.dumps(event.args, ensure_ascii=False)}){RESET}")
+    elif isinstance(event, ToolResultEvent):
+        status = "✓" if event.ok else "✗"
+        print(f"{DIM}{status} {event.content[:200]}{RESET}")
+    elif isinstance(event, DoneEvent):
+        print()
+    elif isinstance(event, ErrorEvent):
+        print(f"\nerror: {event.message}", file=sys.stderr)
+        return True
+    return False
+
+
+async def cmd_ask(args) -> int:
+    import uuid
+
     from .agent.loop import AgentLoop
     from .agent.planner import Planner
     from .bootstrap import build_llm
@@ -158,30 +210,7 @@ async def cmd_ask(args) -> int:
     exit_code = 0
     try:
         async for event in events:
-            if args.json:
-                print(json.dumps(event.to_dict(), ensure_ascii=False), flush=True)
-                continue
-            if isinstance(event, PlanEvent):
-                print("Plan:")
-                for k, step in enumerate(event.steps, start=1):
-                    print(f"  {k}. {step}")
-            elif isinstance(event, PlanStepEvent):
-                k, total = event.index + 1, event.total
-                if event.status == "start":
-                    print(f"\n▶ step {k}/{total}: {event.description}")
-                else:
-                    print(f"{DIM}✓ step {k}/{total}{RESET}")
-            elif isinstance(event, TokenEvent):
-                print(event.text, end="", flush=True)
-            elif isinstance(event, ToolCallEvent):
-                print(f"\n{DIM}→ {event.tool}({json.dumps(event.args, ensure_ascii=False)}){RESET}")
-            elif isinstance(event, ToolResultEvent):
-                status = "✓" if event.ok else "✗"
-                print(f"{DIM}{status} {event.content[:200]}{RESET}")
-            elif isinstance(event, DoneEvent):
-                print()
-            elif isinstance(event, ErrorEvent):
-                print(f"\nerror: {event.message}", file=sys.stderr)
+            if _print_event(event, json_mode=args.json):
                 exit_code = 1
         if not args.json and new_conversation:
             print(
@@ -213,6 +242,74 @@ async def _run_planner_turn(planner, prompt, conversation_id, conversations):
 
     if conversations is not None and answer is not None:
         conversations.append(conversation_id, "assistant", answer)
+
+
+async def cmd_chat(args) -> int:
+    """Interactive in-process REPL: one persistent conversation, no daemon."""
+    import uuid
+
+    from .agent.loop import AgentLoop
+    from .bootstrap import build_llm
+    from .conversations import ConversationStore, run_turn
+    from .policy import AutoConfirm, InteractiveCliConfirmation
+
+    try:
+        import readline  # noqa: F401  (enables line editing/history in input())
+    except Exception:
+        pass
+
+    confirmer = AutoConfirm() if args.yes else InteractiveCliConfirmation()
+    config, store, scheduler, registry = _build_runtime(confirmer, dry_run=args.dry_run)
+    conversations = ConversationStore(store)
+
+    conversation_id = args.conversation
+    if args.continue_ and not conversation_id:
+        conversation_id = conversations.last_conversation_id()
+    resumed = conversation_id is not None
+    if conversation_id is None:
+        conversation_id = uuid.uuid4().hex
+
+    scheduler.start()
+    llm = build_llm(config, model_override=args.model or "")
+    loop = AgentLoop(
+        llm,
+        registry,
+        max_iterations=config.get_int("KOW_MAX_ITERATIONS"),
+        context_provider=getattr(registry, "context_provider", None),
+    )
+
+    suffix = " (resumed)" if resumed else ""
+    print(
+        f"{DIM}kow chat — conversation {conversation_id}{suffix}. "
+        f"Type 'exit' or press Ctrl-D to quit.{RESET}"
+    )
+    try:
+        while True:
+            try:
+                line = input("kow› ")
+            except EOFError:
+                print()
+                break
+            except KeyboardInterrupt:
+                print()
+                continue
+            text = line.strip()
+            if not text:
+                continue
+            if text in ("exit", "quit", ":q"):
+                break
+            try:
+                async for event in run_turn(
+                    loop, text, conversation_id, conversations, **_summarize_kwargs(config)
+                ):
+                    _print_event(event)
+            except KeyboardInterrupt:
+                print("\n(interrupted)")
+    finally:
+        scheduler.shutdown()
+        store.close()
+    print(f"{DIM}(conversation: {conversation_id} — reopen with: kow chat --resume){RESET}")
+    return 0
 
 
 def cmd_tools_list(args) -> int:

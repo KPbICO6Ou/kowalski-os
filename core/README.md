@@ -13,11 +13,13 @@ ollama pull qwen2.5:14b        # or 7b on smaller hardware
 ## CLI
 
 ```bash
+kow chat                                   # interactive REPL — stays open, one conversation
+kow chat --resume                          # reopen the most recent conversation in the REPL
 kow ask "find PDFs from the last week"     # one-shot, no daemon (ReAct loop)
 kow ask --plan "research X, then write Y"   # plan-then-execute for multi-step goals
 kow ask --dry-run "tidy my Downloads"       # preview: mutating tools reported, not run
 kow ask --yes --json "..."                 # auto-confirm + JSON event stream
-kow ask --continue "and the largest one?"  # follow-up in the most recent conversation
+kow ask --continue "and the largest one?"  # follow-up in the most recent conversation (--resume alias)
 kow ask -c <ID> "..."                      # follow-up in a specific conversation
 kow serve [--api]                          # daemon: socket/D-Bus (+ REST on 127.0.0.1:8377)
 kow tools list [--schemas]
