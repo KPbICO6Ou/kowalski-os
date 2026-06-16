@@ -38,16 +38,18 @@ class OpenWakeWordListener:
         self._oww = None
 
     def _load(self):
+        # ONNX is the default framework: openWakeWord pins tflite-runtime, which
+        # has no Python 3.12 wheel, so we install openWakeWord --no-deps with
+        # onnxruntime and run the .onnx model variants. Only an explicit .tflite
+        # path opts into tflite.
         from openwakeword.model import Model
 
         model = self.model
-        if model.endswith(".onnx"):
-            return Model(wakeword_models=[model], inference_framework="onnx")
         if model.endswith(".tflite"):
             return Model(wakeword_models=[model], inference_framework="tflite")
         if model:
-            return Model(wakeword_models=[model])
-        return Model()
+            return Model(wakeword_models=[model], inference_framework="onnx")
+        return Model(inference_framework="onnx")
 
     async def wait_for_wake(self) -> None:  # pragma: no cover - needs hardware + model
         import numpy as np

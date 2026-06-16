@@ -14,8 +14,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Microphone / wake word / VAD / playback stack — Linux desktop, not run in CI.
-mic = ["sounddevice>=0.4", "numpy>=1.26", "openwakeword>=0.6"]
+# Microphone / VAD / playback + the ONNX runtime openWakeWord uses — Linux
+# desktop, not run in CI. openWakeWord itself is NOT listed here: on Python 3.12
+# its tflite-runtime pin is uninstallable (no wheel), so install it separately
+# with `pip install --no-deps openwakeword` (it runs on onnxruntime). See README.
+mic = ["sounddevice>=0.4", "numpy>=1.26", "onnxruntime>=1.17", "scikit-learn", "scipy", "tqdm", "requests"]
 
 [project.scripts]
 kow-voice = "kowvoice.cli:main"

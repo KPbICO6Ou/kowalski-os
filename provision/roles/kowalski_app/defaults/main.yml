@@ -25,3 +25,4 @@ kow_manage_conf: true   # false: deploy code/service but leave a hand-tuned conf
 kow_theme: true         # install XFCE theme + first-login onboarding
 kow_backup: true        # take a pre-deploy profile backup (for rollback)
 kow_service: true       # install + enable the kowalski-core user service
+kow_voice_mic: false    # install the mic + wake-word stack (sounddevice, onnx, openWakeWord)

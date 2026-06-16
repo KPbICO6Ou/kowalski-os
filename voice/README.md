@@ -27,11 +27,18 @@ each spoken sentence, and the final answer.
 ## Real pipeline (Linux desktop)
 
 ```sh
-pip install -e 'voice[mic]'     # sounddevice + numpy + openwakeword
-kow-setup                        # set STT/TTS endpoints + wake activation (writes kowalski.conf)
-kow-voice check                 # probe STT, TTS, and the kow-core socket
-kow-voice run                   # wake → STT → agent → TTS → playback
+pip install -e 'voice[mic]'         # sounddevice + numpy + onnxruntime + helpers
+pip install --no-deps openwakeword  # only for wake_word/both modes (see note below)
+kow-setup                            # set STT/TTS endpoints + wake activation (writes kowalski.conf)
+kow-voice check                     # probe STT, TTS, and the kow-core socket
+kow-voice run                       # wake → STT → agent → TTS → playback
 ```
+
+> **openWakeWord on Python 3.12:** the package pins `tflite-runtime`, which has
+> no 3.12 wheel, so it can't be installed normally. It also runs on
+> **onnxruntime**, so install it with `--no-deps` (onnxruntime comes from the
+> `[mic]` extra) and the listener uses the `.onnx` model variants automatically.
+> Skip this line if you only use `push_to_talk`.
 
 `run` uses the real adapters: an HTTP STT client (wachawo/speech-to-text,
 `POST /api/stt`), an HTTP TTS client (wachawo/text-to-speech, `POST /api/tts`,

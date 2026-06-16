@@ -87,6 +87,27 @@
   when: (kow_git is changed) or (not kow_venv.stat.exists)
   notify: Restart kowalski-core
 
+- name: Check whether the voice mic + wake-word stack is present
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.command: "{{ kow_prefix }}/.venv/bin/python -c 'import sounddevice, openwakeword'"
+  register: kow_mic_present
+  changed_when: false
+  failed_when: false
+  when: kow_voice_mic | bool
+
+- name: Install the voice mic + wake-word stack (onnx; openWakeWord --no-deps for py3.12)
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.shell: |
+    set -e
+    "{{ kow_prefix }}/.venv/bin/pip" install -e "{{ kow_prefix }}/voice[mic]"
+    "{{ kow_prefix }}/.venv/bin/pip" install --no-deps openwakeword
+  args:
+    executable: /bin/bash
+  changed_when: true
+  when: kow_voice_mic | bool and (kow_mic_present.rc | default(1)) != 0
+
 - name: Link the CLI launchers into /usr/local/bin
   become: true
   ansible.builtin.file:
