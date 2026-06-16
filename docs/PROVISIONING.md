@@ -58,17 +58,28 @@ systemd **user** service, and installs the XFCE theme + onboarding. The LLM
 (Ollama) is *configured*, not installed.
 
 ```bash
-./provision/deploy.sh <username> [addr]      # addr optional, default 127.0.0.1
+./provision/deploy.sh <username> [addr] [--pass PW] [--sudo-pass PW] [extra args]
+#   addr        optional, default 127.0.0.1 (local connection)
+#   --pass      SSH login password for a remote host (needs `sshpass`)
+#   --sudo-pass sudo/become password; defaults to --pass when omitted
 ```
 
 ```bash
 ./provision/deploy.sh alice                  # deploy locally as alice
-./provision/deploy.sh alice 10.0.0.5         # deploy to a remote host over SSH
+./provision/deploy.sh alice 10.0.0.5         # remote over SSH (key auth)
+./provision/deploy.sh alice 10.0.0.5 --pass 's3cret'      # remote with a login password
+./provision/deploy.sh alice 10.0.0.5 --sudo-pass 's3cret' # key login, sudo needs a password
 # point at a remote Ollama and pick models (extra args pass through to ansible):
 ./provision/deploy.sh alice 10.0.0.5 \
     -e kow_ollama_host=http://10.0.0.6:11434 -e kow_ollama_model=qwen3:8b \
     -e kow_embed_model=bge-m3 -e kow_vision=0
 ```
+
+Passwords are handed to Ansible through a temporary `0600` vars file (removed on
+exit) as `ansible_password` / `ansible_become_password`, so they never appear on
+the command line or in `ps`. `--pass` for a remote host requires `sshpass` and
+disables host-key prompting for that run; for key-based logins use only
+`--sudo-pass`. Omit both when the account has passwordless sudo.
 
 It is idempotent (re-running converges to `changed=0`, aside from the optional
 pre-deploy profile backup). Useful overrides: `kow_manage_conf=false` (leave a
