@@ -174,6 +174,67 @@ def _edit_text(stdscr, y: int, initial: str, masked: bool) -> str | None:
             buf.append(chr(ch))
 
 
+def _ollama_models(host: str) -> list[str]:
+    """Names of models installed on the Ollama at `host` (empty if unreachable)."""
+    import json
+    import urllib.request
+
+    if not host:
+        return []
+    try:
+        with urllib.request.urlopen(host.rstrip("/") + "/api/tags", timeout=3) as resp:
+            data = json.load(resp)
+        return sorted(m.get("name", "") for m in data.get("models", []) if m.get("name"))
+    except Exception:
+        return []
+
+
+def _pick_from_list(stdscr, title: str, options: list[str], current: str) -> str | None:
+    """Full-screen single-choice picker; Enter selects, Esc cancels."""
+    sel = options.index(current) if current in options else 0
+    while True:
+        stdscr.erase()
+        _put(stdscr, 0, 2, title, curses.A_BOLD)
+        _put(stdscr, 1, 2, "↑/↓ move · Enter select · Esc cancel", curses.A_DIM)
+        for i, opt in enumerate(options):
+            _put(stdscr, 3 + i, 4, opt, curses.A_REVERSE if i == sel else 0)
+        stdscr.refresh()
+        ch = stdscr.getch()
+        if ch == 27:
+            return None
+        if ch in (curses.KEY_ENTER, 10, 13):
+            return options[sel]
+        if ch in (curses.KEY_UP, ord("k")):
+            sel = (sel - 1) % len(options)
+        elif ch in (curses.KEY_DOWN, ord("j")):
+            sel = (sel + 1) % len(options)
+
+
+def _keyname(ch: int) -> str:
+    """Render a captured keypress as a readable combo string."""
+    named = {0: "ctrl+space", 9: "tab", 10: "enter", 13: "enter", 8: "backspace",
+             127: "backspace", 32: "space", curses.KEY_UP: "up", curses.KEY_DOWN: "down",
+             curses.KEY_LEFT: "left", curses.KEY_RIGHT: "right"}
+    if ch in named:
+        return named[ch]
+    if 1 <= ch <= 26:
+        return f"ctrl+{chr(ch + 96)}"
+    if 32 < ch < 127:
+        return chr(ch)
+    for n in range(1, 13):
+        if ch == curses.KEY_F(n):
+            return f"f{n}"
+    return f"key{ch}"
+
+
+def _capture_hotkey(stdscr, y: int) -> str | None:
+    """Wait for one keypress at row `y`; return its combo string, None on Esc."""
+    _put(stdscr, y, VALUE_COL, "press a key…  (Esc cancels)" + " " * 10)
+    stdscr.refresh()
+    ch = stdscr.getch()
+    return None if ch == 27 else _keyname(ch)
+
+
 def _tui_loop(stdscr, work: dict, original: dict, path) -> None:
     curses.curs_set(0)
     stdscr.keypad(True)
@@ -235,6 +296,24 @@ def _tui_loop(stdscr, work: dict, original: dict, path) -> None:
         elif cur.kind == "enum" and ch == curses.KEY_LEFT:
             work[cur.key] = _cycle(cur.choices, work[cur.key], -1)
             saved = False
+        elif cur.kind == "model" and ch in (ord(" "), curses.KEY_ENTER, 10, 13):
+            models = _ollama_models(work["OLLAMA_HOST"])
+            if models:
+                picked = _pick_from_list(
+                    stdscr, f"{cur.short} — Ollama @ {work['OLLAMA_HOST']}", models, work[cur.key])
+                if picked is not None:
+                    work[cur.key] = picked
+                    saved = False
+            else:  # Ollama unreachable — fall back to typing it
+                typed = _edit_text(stdscr, rows[sel], work[cur.key], masked=False)
+                if typed is not None:
+                    work[cur.key] = typed
+                    saved = False
+        elif cur.kind == "hotkey" and ch in (ord(" "), curses.KEY_ENTER, 10, 13):
+            combo = _capture_hotkey(stdscr, rows[sel])
+            if combo is not None:
+                work[cur.key] = combo
+                saved = False
         elif cur.kind in ("text", "secret") and ch in (ord(" "), curses.KEY_ENTER, 10, 13):
             new = _edit_text(stdscr, rows[sel], work[cur.key], masked=cur.kind == "secret")
             if new is not None:
