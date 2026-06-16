@@ -14,6 +14,7 @@ ollama pull qwen2.5:14b        # or 7b on smaller hardware
 
 ```bash
 kow chat                                   # interactive REPL — stays open, one conversation
+kow chat --voice                           # voice + text: type OR press Enter to talk; answers printed + spoken
 kow chat --resume                          # reopen the most recent conversation in the REPL
 kow ask "find PDFs from the last week"     # one-shot, no daemon (ReAct loop)
 kow ask --plan "research X, then write Y"   # plan-then-execute for multi-step goals
@@ -75,6 +76,7 @@ goals where an upfront plan helps; leave it off for quick single-shot asks.
 | `KOW_SUMMARIZE` / `KOW_SUMMARIZE_AFTER` / `KOW_SUMMARIZE_KEEP` | `1` / `24` / `8` | fold old turns of a long conversation into a rolling digest |
 | `KOW_PLUGINS_DIR` | `~/.config/kowalski/plugins` | folder of `*.py` plugins exporting `TOOLS: list[ToolDef]` |
 | `KOW_CHECKLIST` | `1` | visible checklist tools (`plan.create/update/show`) |
+| `KOW_CHAT_VOICE` | `0` | `kow chat` starts with voice (mic + TTS) on by default (needs `voice[mic]`); `--voice`/`--no-voice` override |
 | `KOW_MCP_SERVERS` | — | external MCP servers `name=cmd args;…` (needs the `mcp` package) |
 | `KOW_HEARTBEAT` / `KOW_HEARTBEAT_INTERVAL_MIN` | `0` / `30` | proactive periodic check-in (off by default) |
 

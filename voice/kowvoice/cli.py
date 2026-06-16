@@ -54,6 +54,14 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("run", help="real pipeline (mic + STT/TTS + kow-core)")
     sub.add_parser("check", help="probe STT/TTS/kow-core connectivity")
 
+    chat = sub.add_parser("chat", help="voice + text chat (type or talk; answers printed + spoken)")
+    chat.add_argument("--model", help="override OLLAMA_MODEL")
+    chat.add_argument("--yes", action="store_true", help="auto-approve confirmations")
+    chat.add_argument("--dry-run", dest="dry_run", action="store_true")
+    chat.add_argument("-c", "--conversation", help="conversation ID to resume")
+    chat.add_argument("--continue", "--resume", dest="continue_", action="store_true")
+    chat.add_argument("--no-speak", dest="speak", action="store_false", help="text only (no mic/TTS)")
+
     args = parser.parse_args(argv)
     if args.command == "demo":
         return asyncio.run(cmd_demo(barge_in=args.barge_in))
@@ -61,6 +69,19 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(cmd_run())
     if args.command == "check":
         return asyncio.run(cmd_check())
+    if args.command == "chat":
+        from .chat import run_chat
+
+        return asyncio.run(
+            run_chat(
+                model=args.model or "",
+                yes=args.yes,
+                dry_run=args.dry_run,
+                conversation_id=args.conversation,
+                continue_=args.continue_,
+                speak=args.speak,
+            )
+        )
     parser.print_help()
     return 1
 

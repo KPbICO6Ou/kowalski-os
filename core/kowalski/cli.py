@@ -46,6 +46,12 @@ def main(argv: list[str] | None = None) -> int:
 
     chat = sub.add_parser("chat", help="interactive REPL (stays open, one conversation)")
     chat.add_argument("--model", help="override OLLAMA_MODEL")
+    chat.add_argument(
+        "--voice",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="voice I/O (mic + TTS); default from KOW_CHAT_VOICE",
+    )
     chat.add_argument("--yes", action="store_true", help="auto-approve confirmations (not destructive)")
     chat.add_argument(
         "--dry-run",
@@ -245,13 +251,37 @@ async def _run_planner_turn(planner, prompt, conversation_id, conversations):
 
 
 async def cmd_chat(args) -> int:
-    """Interactive in-process REPL: one persistent conversation, no daemon."""
+    """Interactive in-process REPL: one persistent conversation, no daemon.
+
+    With voice enabled (--voice or KOW_CHAT_VOICE=1) it delegates to the voice
+    package's combined voice+text chat (type or talk; answers printed + spoken)."""
     import uuid
 
     from .agent.loop import AgentLoop
     from .bootstrap import build_llm
     from .conversations import ConversationStore, run_turn
     from .policy import AutoConfirm, InteractiveCliConfirmation
+
+    voice_flag = getattr(args, "voice", None)
+    voice_on = Config.load().get_bool("KOW_CHAT_VOICE") if voice_flag is None else voice_flag
+    if voice_on:
+        try:
+            from kowvoice.chat import run_chat
+        except Exception as exc:
+            print(
+                f"voice chat unavailable ({exc}); install the voice package + mic extra: "
+                "pip install -e 'voice[mic]'",
+                file=sys.stderr,
+            )
+            return 2
+        return await run_chat(
+            model=args.model or "",
+            yes=args.yes,
+            dry_run=args.dry_run,
+            conversation_id=args.conversation,
+            continue_=args.continue_,
+            speak=True,
+        )
 
     try:
         import readline  # noqa: F401  (enables line editing/history in input())

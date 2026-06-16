@@ -32,7 +32,17 @@ pip install --no-deps openwakeword  # only for wake_word/both modes (see note be
 kow-setup                            # set STT/TTS endpoints + wake activation (writes kowalski.conf)
 kow-voice check                     # probe STT, TTS, and the kow-core socket
 kow-voice run                       # wake → STT → agent → TTS → playback
+kow-voice chat                      # voice + text in one conversation (type OR press Enter to talk)
 ```
+
+### Voice + text chat
+
+`kow-voice chat` (same as `kow chat --voice`) runs one conversation you can drive
+either way: type a message, or press **Enter on an empty line** to talk
+(push-to-talk → STT). Every answer is **both printed and spoken** (TTS). Set
+`KOW_CHAT_VOICE=1` in `kowalski.conf` to make plain `kow chat` start in this mode.
+`--no-speak` falls back to text only. The agent runs in-process through kow-core's
+`run_turn`, so typed and spoken turns share the same persisted conversation.
 
 > **openWakeWord on Python 3.12:** the package pins `tflite-runtime`, which has
 > no 3.12 wheel, so it can't be installed normally. It also runs on

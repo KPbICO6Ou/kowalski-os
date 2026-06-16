@@ -47,6 +47,9 @@ DEFAULTS: dict[str, str] = {
     "KOW_PLUGINS_DIR": "",
     # Visible checklist tools (plan.create/update/show) for multi-step work
     "KOW_CHECKLIST": "1",
+    # `kow chat` starts with voice (mic + TTS) on by default; needs the voice
+    # package + [mic] extra. --voice/--no-voice override per invocation.
+    "KOW_CHAT_VOICE": "0",
     # External MCP servers: "name=cmd arg arg;name2=cmd2 ..." (needs the `mcp` package)
     "KOW_MCP_SERVERS": "",
     # Proactive heartbeat: periodic agent check-in (OFF by default — autonomy)
