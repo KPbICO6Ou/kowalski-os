@@ -22,7 +22,11 @@ kow_vision: "1"
 kow_allowed_paths: "{{ kow_home }}"
 
 kow_manage_conf: true   # false: deploy code/service but leave a hand-tuned conf alone
+kow_force_conf: false   # true: re-assert the managed keys even when set (else seed only if absent)
 kow_theme: true         # install XFCE theme + first-login onboarding
 kow_backup: true        # take a pre-deploy profile backup (for rollback)
 kow_service: true       # install + enable the kowalski-core user service
 kow_voice_mic: false    # install the mic + wake-word stack (sounddevice, onnx, openWakeWord)
+kow_voice_train: false  # also install torch + torchaudio for `kow-voice train` (wake-word training)
+kow_voice_venv: "{{ kow_prefix }}/.venv"   # which venv receives the voice / mic / train stack
+kow_torch_index: "https://download.pytorch.org/whl/cpu"  # CPU torch wheels; for a CUDA box set a cuXXX index
