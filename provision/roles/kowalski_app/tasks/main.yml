@@ -44,7 +44,15 @@
     version: "{{ kow_version }}"
     depth: 1
     update: true
+    force: true   # reset to the remote ref so updates survive a force-push
   register: kow_git
+  notify: Restart kowalski-core
+
+- name: Report repository state
+  ansible.builtin.debug:
+    msg: >-
+      kowalski source {{ 'UPDATED to' if kow_git is changed else 'already at' }}
+      {{ kow_git.after | default(kow_version) }}
 
 - name: Check whether the venv is already built
   become: true
@@ -53,24 +61,31 @@
     path: "{{ kow_prefix }}/.venv/bin/kow"
   register: kow_venv
 
-- name: Build the venv and install the packages
+- name: Create the virtualenv
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.command: "python3 -m venv {{ kow_prefix }}/.venv"
+  args:
+    creates: "{{ kow_prefix }}/.venv/bin/python"
+
+- name: Install or update the packages (editable, so updates are picked up)
   become: true
   become_user: "{{ kow_user }}"
   ansible.builtin.shell: |
     set -e
-    python3 -m venv "{{ kow_prefix }}/.venv"
     "{{ kow_prefix }}/.venv/bin/pip" install --upgrade pip
-    "{{ kow_prefix }}/.venv/bin/pip" install \
-      "{{ kow_prefix }}/core{{ kow_extras }}" \
-      "{{ kow_prefix }}/indexer" \
-      "{{ kow_prefix }}/ui" \
-      "{{ kow_prefix }}/voice" \
-      "{{ kow_prefix }}/setup"
+    "{{ kow_prefix }}/.venv/bin/pip" install --upgrade \
+      -e "{{ kow_prefix }}/core{{ kow_extras }}" \
+      -e "{{ kow_prefix }}/indexer" \
+      -e "{{ kow_prefix }}/ui" \
+      -e "{{ kow_prefix }}/voice" \
+      -e "{{ kow_prefix }}/setup"
   args:
     executable: /bin/bash
   register: kow_install
   changed_when: true
   when: (kow_git is changed) or (not kow_venv.stat.exists)
+  notify: Restart kowalski-core
 
 - name: Link the CLI launchers into /usr/local/bin
   become: true
@@ -106,7 +121,6 @@
   ansible.builtin.command: id -u
   register: kow_uid
   changed_when: false
-  when: kow_service | bool
 
 - name: Check linger state
   become: true
@@ -139,6 +153,7 @@
     dest: "{{ kow_home }}/.config/systemd/user/kowalski-core.service"
     mode: "0644"
   when: kow_service | bool
+  notify: Restart kowalski-core
 
 - name: Enable and start kowalski-core (user scope)
   become: true

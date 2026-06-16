@@ -1,0 +1,13 @@
+---
+# Restart the daemon when the code, dependencies, or the unit changed, so an
+# update is actually picked up by the running service.
+- name: Restart kowalski-core
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.systemd_service:
+    name: kowalski-core.service
+    scope: user
+    state: restarted
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ kow_uid.stdout }}"
+  when: kow_service | bool
