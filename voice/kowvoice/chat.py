@@ -129,9 +129,8 @@ async def run_chat(
             f"{DIM}Type a message, or press Enter on an empty line to talk. "
             f"'quit' or Ctrl-D to exit.{RESET}"
         )
-        hotkey = config.get("KOW_VOICE_HOTKEY", "").strip()
-        if hotkey:
-            print(f"{DIM}Push-to-talk hotkey: {hotkey}{RESET}")
+        hotkey = config.get("KOW_VOICE_HOTKEY", "").strip() or "Enter (on an empty line)"
+        print(f"{DIM}Push-to-talk: {hotkey}{RESET}")
     else:
         print(f"{DIM}Type a message. 'quit' or Ctrl-D to exit.{RESET}")
 
@@ -154,6 +153,11 @@ async def run_chat(
                 print(f"{DIM}[listening…]{RESET}")
                 try:
                     text = await voice_io.record_and_transcribe()
+                except (KeyboardInterrupt, asyncio.CancelledError):
+                    # Ctrl-C while recording cancels just this turn (the mic stream
+                    # tears down) — back to the prompt instead of crashing out.
+                    print(f"{DIM}(cancelled){RESET}")
+                    continue
                 except Exception as exc:
                     print(f"{DIM}(voice input failed: {exc}){RESET}")
                     continue

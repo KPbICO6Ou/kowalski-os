@@ -228,11 +228,18 @@ def _keyname(ch: int) -> str:
 
 
 def _capture_hotkey(stdscr, y: int) -> str | None:
-    """Wait for one keypress at row `y`; return its combo string, None on Esc."""
-    _put(stdscr, y, VALUE_COL, "press a key…  (Esc cancels)" + " " * 10)
+    """Capture one chord at row `y`. Esc cancels. Ctrl/Alt are terminal-readable
+    (Ctrl = control codes, Alt = an Esc prefix); Shift/Super on printable keys are
+    NOT — set those as text, e.g. `kow setup set kow_voice_hotkey 'super+space'`."""
+    _put(stdscr, y, VALUE_COL, "Press a key (or Esc)" + " " * 12)
     stdscr.refresh()
     ch = stdscr.getch()
-    return None if ch == 27 else _keyname(ch)
+    if ch == 27:  # lone Esc cancels; Esc immediately followed by a key is Alt+key
+        stdscr.nodelay(True)
+        nxt = stdscr.getch()
+        stdscr.nodelay(False)
+        return None if nxt == -1 else "alt+" + _keyname(nxt)
+    return _keyname(ch)
 
 
 def _tui_loop(stdscr, work: dict, original: dict, path) -> None:
