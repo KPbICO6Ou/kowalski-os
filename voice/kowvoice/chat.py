@@ -178,6 +178,64 @@ async def run_chat(
     return 0
 
 
+async def run_once(*, model: str = "", speak: bool = True, voice_io=None) -> int:
+    """One push-to-talk turn: record a single utterance, answer it (printed and,
+    when speak, spoken), then exit. Meant to be bound to a global hotkey.
+
+    Tool confirmations are auto-denied (no GUI on a hotkey turn), so destructive
+    actions are blocked by design. `voice_io` is injectable for tests."""
+    from kowalski.agent.loop import AgentLoop
+    from kowalski.bootstrap import build_default_registry, build_llm
+    from kowalski.config import Config
+    from kowalski.conversations import ConversationStore
+    from kowalski.policy import AutoDeny
+    from kowalski.scheduler import ReminderScheduler
+    from kowalski.store import Store
+
+    from .settings import VoiceSettings
+
+    config = Config.load()
+    store = Store(config.get_path("KOW_DB_PATH"))
+    scheduler = ReminderScheduler(store)
+    registry = build_default_registry(config, store, scheduler, AutoDeny())
+    conversations = ConversationStore(store)
+    conversation_id = conversations.last_conversation_id() or uuid.uuid4().hex
+    scheduler.start()
+    llm = build_llm(config, model_override=model or "")
+    loop = AgentLoop(
+        llm,
+        registry,
+        max_iterations=config.get_int("KOW_MAX_ITERATIONS"),
+        context_provider=getattr(registry, "context_provider", None),
+    )
+    if voice_io is None:
+        voice_io = VoiceChatIO(VoiceSettings.load())
+    try:
+        print(f"{DIM}[listening…]{RESET}")
+        try:
+            text = await voice_io.record_and_transcribe()
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            print(f"{DIM}(cancelled){RESET}")
+            return 0
+        except Exception as exc:
+            print(f"{DIM}(voice input failed: {exc}){RESET}")
+            return 1
+        if not text:
+            print(f"{DIM}(no speech){RESET}")
+            return 0
+        print(f"{DIM}you (voice):{RESET} {text}")
+        answer = await _drive_turn(loop, text, conversation_id, conversations, config)
+        if speak and answer:
+            try:
+                await voice_io.speak(answer)
+            except Exception as exc:
+                print(f"{DIM}(speech output failed: {exc}){RESET}")
+    finally:
+        scheduler.shutdown()
+        store.close()
+    return 0
+
+
 async def _drive_turn(loop, text, conversation_id, conversations, config) -> str:
     """Run one agent turn: stream events to the console, return the answer text."""
     parts: list[str] = []

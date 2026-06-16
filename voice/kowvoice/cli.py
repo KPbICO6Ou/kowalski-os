@@ -2,6 +2,7 @@
 
   kow-voice demo [--barge-in]   run the whole pipeline with mocks (any OS)
   kow-voice run                 real pipeline (mic + STT/TTS services + kow-core)
+  kow-voice once                one push-to-talk turn (for a global hotkey)
   kow-voice check               probe STT, TTS, and the kow-core socket
   kow-voice test                round-trip self-test (greet → record → STT → echo)
   kow-voice chat                voice + text chat in one conversation
@@ -56,6 +57,10 @@ def main(argv: list[str] | None = None) -> int:
     demo.add_argument("--barge-in", action="store_true", help="simulate a mid-answer interruption")
 
     sub.add_parser("run", help="real pipeline (mic + STT/TTS + kow-core)")
+
+    once = sub.add_parser("once", help="one push-to-talk turn (record → answer → speak); for a hotkey")
+    once.add_argument("--model", help="override OLLAMA_MODEL")
+    once.add_argument("--no-speak", dest="speak", action="store_false", help="text only (no TTS)")
     sub.add_parser("check", help="probe STT/TTS/kow-core connectivity")
     sub.add_parser(
         "test", help="round-trip self-test: greet → record → STT → echo (LLM diagnosis on failure)"
@@ -83,6 +88,13 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(cmd_demo(barge_in=args.barge_in))
     if args.command == "run":
         return asyncio.run(cmd_run())
+    if args.command == "once":
+        from .chat import run_once
+
+        try:
+            return asyncio.run(run_once(model=args.model or "", speak=args.speak))
+        except KeyboardInterrupt:
+            return 0
     if args.command == "check":
         return asyncio.run(cmd_check())
     if args.command == "test":
