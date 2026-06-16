@@ -27,25 +27,25 @@ class Setting:
 GROUPS = ("Ollama", "STT", "TTS", "Voice", "Agent")
 
 SETTINGS: tuple[Setting, ...] = (
-    Setting("HOST", "OLLAMA_HOST", "Ollama", "text", "Ollama server URL"),
-    Setting("MODEL", "OLLAMA_MODEL", "Ollama", "text", "Chat model name"),
-    Setting("EMBED", "KOW_EMBED_MODEL", "Ollama", "text", "Embedding model (semantic index)"),
-    Setting("VISION", "KOW_VISION", "Ollama", "bool", "Screen vision tools (capture/describe)"),
-    Setting("TEMP", "KOW_TEMPERATURE", "Ollama", "text", "Sampling temperature"),
-    Setting("STT", "STT_URL", "STT", "text", "Speech-to-text endpoint URL"),
-    Setting("STT_TOKEN", "STT_TOKEN", "STT", "secret", "STT auth token"),
-    Setting("STT_LANG", "STT_LANGUAGE", "STT", "text", "STT language, e.g. ru / en"),
-    Setting("TTS", "TTS_URL", "TTS", "text", "Text-to-speech endpoint URL"),
-    Setting("TTS_TOKEN", "TTS_TOKEN", "TTS", "secret", "TTS auth token"),
-    Setting("WAKE", "KOW_WAKE_MODE", "Voice", "enum", "How a voice turn starts",
+    Setting("host", "OLLAMA_HOST", "Ollama", "text", "Ollama server URL"),
+    Setting("model", "OLLAMA_MODEL", "Ollama", "text", "Chat model name"),
+    Setting("embed", "KOW_EMBED_MODEL", "Ollama", "text", "Embedding model (semantic index)"),
+    Setting("vision", "KOW_VISION", "Ollama", "bool", "Screen vision tools (capture/describe)"),
+    Setting("temp", "KOW_TEMPERATURE", "Ollama", "text", "Sampling temperature"),
+    Setting("stt", "STT_URL", "STT", "text", "Speech-to-text endpoint URL"),
+    Setting("stt_token", "STT_TOKEN", "STT", "secret", "STT auth token"),
+    Setting("stt_lang", "STT_LANGUAGE", "STT", "text", "STT language, e.g. ru / en"),
+    Setting("tts", "TTS_URL", "TTS", "text", "Text-to-speech endpoint URL"),
+    Setting("tts_token", "TTS_TOKEN", "TTS", "secret", "TTS auth token"),
+    Setting("wake", "KOW_WAKE_MODE", "Voice", "enum", "How a voice turn starts",
             ("push_to_talk", "wake_word", "both")),
-    Setting("WAKE_WORD", "KOW_WAKE_WORD", "Voice", "text", "Wake phrase (openWakeWord name)"),
-    Setting("WAKE_MODEL", "KOW_WAKE_MODEL", "Voice", "text", "Path to a custom wake .onnx"),
-    Setting("BARGE", "KOW_BARGE_IN", "Voice", "bool", "Allow interrupting the agent (barge-in)"),
-    Setting("VOICE_CHAT", "KOW_CHAT_VOICE", "Voice", "bool", "`kow chat` starts in voice mode"),
-    Setting("PATHS", "KOW_ALLOWED_PATHS", "Agent", "text", "Allowed filesystem roots (':'-separated)"),
-    Setting("LLM", "KOW_LLM", "Agent", "enum", "LLM transport", ("ollama", "pydantic-ai")),
-    Setting("MAX_ITER", "KOW_MAX_ITERATIONS", "Agent", "text", "Max agent tool iterations"),
+    Setting("wake_word", "KOW_WAKE_WORD", "Voice", "text", "Wake phrase (openWakeWord name)"),
+    Setting("wake_model", "KOW_WAKE_MODEL", "Voice", "text", "Path to a custom wake .onnx"),
+    Setting("barge", "KOW_BARGE_IN", "Voice", "bool", "Allow interrupting the agent (barge-in)"),
+    Setting("voice_chat", "KOW_CHAT_VOICE", "Voice", "bool", "`kow chat` starts in voice mode"),
+    Setting("paths", "KOW_ALLOWED_PATHS", "Agent", "text", "Allowed filesystem roots (':'-separated)"),
+    Setting("llm", "KOW_LLM", "Agent", "enum", "LLM transport", ("ollama", "pydantic-ai")),
+    Setting("max_iter", "KOW_MAX_ITERATIONS", "Agent", "text", "Max agent tool iterations"),
 )
 
 BY_SHORT: dict[str, Setting] = {s.short: s for s in SETTINGS}
@@ -53,9 +53,8 @@ BY_KEY: dict[str, Setting] = {s.key: s for s in SETTINGS}
 
 
 def resolve(name: str) -> Setting | None:
-    """Match a short key (``HOST``) or a full KEY (``OLLAMA_HOST``), any case."""
-    upper = name.upper()
-    return BY_KEY.get(upper) or BY_SHORT.get(upper)
+    """Match a short key (``host``) or a full KEY (``OLLAMA_HOST``), any case."""
+    return BY_KEY.get(name.upper()) or BY_SHORT.get(name.lower())
 
 
 def normalize(setting: Setting, value: str) -> str:
