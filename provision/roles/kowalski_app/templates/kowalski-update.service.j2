@@ -1,0 +1,11 @@
+[Unit]
+Description=Kowalski OS auto-update (pull origin/{{ kow_version }} into {{ kow_prefix }})
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=KOW_PREFIX={{ kow_prefix }}
+Environment=KOW_BRANCH={{ kow_version }}
+Environment=KOW_EXTRAS={{ kow_extras }}
+ExecStart={{ kow_prefix }}/provision/autoupdate.sh

@@ -26,6 +26,8 @@ kow_force_conf: false   # true: re-assert the managed keys even when set (else s
 kow_theme: true         # install XFCE theme + first-login onboarding
 kow_backup: true        # take a pre-deploy profile backup (for rollback)
 kow_service: true       # install + enable the kowalski-core user service
+kow_autoupdate: false   # install a user timer that pulls origin into the install on a schedule (beta)
+kow_autoupdate_interval: "2min"   # how often the auto-update timer polls origin
 kow_voice_mic: false    # install the mic + wake-word stack (sounddevice, onnx, openWakeWord)
 kow_voice_train: false  # also install torch + torchaudio for `kow-voice train` (wake-word training)
 kow_voice_venv: "{{ kow_prefix }}/.venv"   # which venv receives the voice / mic / train stack
