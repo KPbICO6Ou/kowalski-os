@@ -64,7 +64,11 @@ def main(argv: list[str] | None = None) -> int:
     train = sub.add_parser("train", help="prepare a custom wake word (register a model or train)")
     train.add_argument("phrase", help="wake phrase, e.g. kowalski or hey_jarvis")
     train.add_argument("--model", help="path to an already-trained .onnx/.tflite model")
-    train.add_argument("--out-dir", type=Path, dest="out_dir", help="where to store the model")
+    train.add_argument("--out-dir", type=Path, dest="out_dir", help="where to store the model / bundle")
+    train.add_argument("--prepare", action="store_true",
+                       help="build a portable training bundle for a GPU box (no training here)")
+    train.add_argument("--samples", type=int, help="positive synthetic clips (default 50000)")
+    train.add_argument("--steps", type=int, help="training steps (default 50000)")
 
     chat = sub.add_parser("chat", help="voice + text chat (type or talk; answers printed + spoken)")
     chat.add_argument("--model", help="override OLLAMA_MODEL")
@@ -88,7 +92,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "train":
         from .train import run_train
 
-        return run_train(args.phrase, model=args.model, out_dir=args.out_dir)
+        return run_train(args.phrase, model=args.model, out_dir=args.out_dir,
+                         prepare=args.prepare, n_samples=args.samples, steps=args.steps)
     if args.command == "chat":
         from .chat import run_chat
 

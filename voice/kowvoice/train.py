@@ -82,13 +82,29 @@ def run_train(
     out_dir: Path | None = None,
     config_path: Path | None = None,
     on_text=print,
+    prepare: bool = False,
+    n_samples: int | None = None,
+    steps: int | None = None,
 ) -> int:
-    """Returns 0 when a model/word was registered, 2 when training is still
-    required (with guidance)."""
+    """Returns 0 when a model/word was registered or a bundle was prepared, 2
+    when training is still required (with guidance)."""
     phrase = (phrase or "").strip()
     if not phrase:
-        on_text("usage: kow-voice train <phrase> [--model file.onnx]")
+        on_text("usage: kow-voice train <phrase> [--model file.onnx | --prepare]")
         return 2
+
+    if prepare:
+        from . import train_bundle
+
+        opts = {k: v for k, v in (("n_samples", n_samples), ("steps", steps)) if v}
+        path = train_bundle.write_bundle(phrase, out_dir=out_dir, **opts)
+        on_text(
+            f"prepared wake-word training bundle: {path}\n"
+            "Carry it to a CUDA GPU box and run ./train.sh (see README.md inside), "
+            f"then bring the model back and run:\n"
+            f"  kow-voice train {phrase} --model {slugify(phrase)}.onnx"
+        )
+        return 0
 
     if is_pretrained(phrase):
         _merge_conf({"KOW_WAKE_WORD": phrase}, config_path)
@@ -105,6 +121,11 @@ def run_train(
         dest.parent.mkdir(parents=True, exist_ok=True)
         if src.resolve() != dest.resolve():
             shutil.copyfile(src, dest)
+            # openWakeWord exports split the graph (.onnx) from its weights
+            # (.onnx.data); carry the sidecar across or the model won't load.
+            sidecar = Path(str(src) + ".data")
+            if sidecar.exists():
+                shutil.copyfile(sidecar, Path(str(dest) + ".data"))
         _merge_conf({"KOW_WAKE_MODEL": str(dest)}, config_path)
         on_text(f"registered wake model: {dest}\n"
                 "(KOW_WAKE_MODEL set, wake mode = both) — try: kow-voice run")
@@ -128,6 +149,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="kow-voice train", description="prepare a wake word")
     parser.add_argument("phrase", help="wake phrase, e.g. kowalski or hey_jarvis")
     parser.add_argument("--model", help="path to an already-trained .onnx/.tflite model")
-    parser.add_argument("--out-dir", type=Path, help="where to store the model")
+    parser.add_argument("--out-dir", type=Path, help="where to store the model / bundle")
+    parser.add_argument("--prepare", action="store_true",
+                        help="build a portable training bundle for a GPU box (no training here)")
+    parser.add_argument("--samples", type=int, help="positive synthetic clips (default 50000)")
+    parser.add_argument("--steps", type=int, help="training steps (default 50000)")
     args = parser.parse_args(argv)
-    return run_train(args.phrase, model=args.model, out_dir=args.out_dir)
+    return run_train(args.phrase, model=args.model, out_dir=args.out_dir,
+                     prepare=args.prepare, n_samples=args.samples, steps=args.steps)
