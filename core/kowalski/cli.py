@@ -81,6 +81,17 @@ def main(argv: list[str] | None = None) -> int:
     journal_tail = journal_sub.add_parser("tail", help="show recent journal entries")
     journal_tail.add_argument("-n", type=int, default=20, dest="limit")
 
+    sub.add_parser("settings", help="open the settings TUI (inputs + toggles)")
+
+    setup = sub.add_parser("setup", help="view/edit settings (kowalski.conf)")
+    setup_sub = setup.add_subparsers(dest="setup_command")
+    setup_sub.add_parser("show", help="print every setting (short keys + values)")
+    setup_get = setup_sub.add_parser("get", help="print one setting by short or full key")
+    setup_get.add_argument("name", help="short key (e.g. host) or full KEY (OLLAMA_HOST)")
+    setup_set = setup_sub.add_parser("set", help="set one setting by short or full key")
+    setup_set.add_argument("name", help="short key (e.g. host) or full KEY (OLLAMA_HOST)")
+    setup_set.add_argument("value", help="new value")
+
     args = parser.parse_args(argv)
 
     if args.command == "ask":
@@ -101,6 +112,21 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_tools_list(args)
     if args.command == "journal" and args.journal_command == "tail":
         return cmd_journal_tail(args)
+    if args.command == "settings":
+        from .settings_cli import cmd_settings_tui
+
+        return cmd_settings_tui(args)
+    if args.command == "setup":
+        from . import settings_cli
+
+        if args.setup_command == "show":
+            return settings_cli.cmd_setup_show(args)
+        if args.setup_command == "get":
+            return settings_cli.cmd_setup_get(args)
+        if args.setup_command == "set":
+            return settings_cli.cmd_setup_set(args)
+        setup.print_help()
+        return 1
     parser.print_help()
     return 1
 
