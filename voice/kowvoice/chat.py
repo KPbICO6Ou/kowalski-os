@@ -25,6 +25,28 @@ from kowalski.conversations import run_turn
 DIM = "\033[2m"
 RESET = "\033[0m"
 
+_MOD_NAMES = {"ctrl": "Ctrl", "control": "Ctrl", "alt": "Alt", "shift": "Shift",
+              "super": "Super", "win": "Super", "meta": "Super", "cmd": "Cmd"}
+
+
+def _fmt_hotkey(combo: str) -> str:
+    """Pretty-print a 'mod+key' combo for the banner, e.g. 'alt+v' -> 'Alt+v'."""
+    return "+".join(_MOD_NAMES.get(p.lower(), p) for p in combo.split("+"))
+
+
+def _notify(summary: str, body: str = "") -> None:
+    """Best-effort desktop notification — so a hotkey-launched turn (no terminal)
+    is still visible. No-op when notify-send is absent."""
+    import shutil
+    import subprocess
+
+    if not shutil.which("notify-send"):
+        return
+    try:
+        subprocess.Popen(["notify-send", "-a", "Kowalski OS", summary, body])
+    except Exception:
+        pass
+
 
 class VoiceChatIO:
     """Real mic->STT input and TTS->speaker output, built lazily from settings.
@@ -125,12 +147,12 @@ async def run_chat(
     mode = "voice + text" if speak else "text"
     print(f"{DIM}kow chat ({mode}) — conversation {conversation_id}{suffix}.{RESET}")
     if speak:
+        hotkey = config.get("KOW_VOICE_HOTKEY", "").strip()
+        extra = f" (or {_fmt_hotkey(hotkey)})" if hotkey else ""
         print(
-            f"{DIM}Type a message, or press Enter on an empty line to talk. "
+            f"{DIM}Type a message, or press Enter on an empty line{extra} to talk. "
             f"'quit' or Ctrl-D to exit.{RESET}"
         )
-        hotkey = config.get("KOW_VOICE_HOTKEY", "").strip() or "Enter (on an empty line)"
-        print(f"{DIM}Push-to-talk: {hotkey}{RESET}")
     else:
         print(f"{DIM}Type a message. 'quit' or Ctrl-D to exit.{RESET}")
 
@@ -212,6 +234,7 @@ async def run_once(*, model: str = "", speak: bool = True, voice_io=None) -> int
         voice_io = VoiceChatIO(VoiceSettings.load())
     try:
         print(f"{DIM}[listening…]{RESET}")
+        _notify("🎤 Listening…", "Speak now")
         try:
             text = await voice_io.record_and_transcribe()
         except (KeyboardInterrupt, asyncio.CancelledError):
@@ -219,12 +242,17 @@ async def run_once(*, model: str = "", speak: bool = True, voice_io=None) -> int
             return 0
         except Exception as exc:
             print(f"{DIM}(voice input failed: {exc}){RESET}")
+            _notify("Voice input failed", str(exc))
             return 1
         if not text:
             print(f"{DIM}(no speech){RESET}")
+            _notify("No speech heard")
             return 0
         print(f"{DIM}you (voice):{RESET} {text}")
+        _notify("🗣 You said", text)
         answer = await _drive_turn(loop, text, conversation_id, conversations, config)
+        if answer:
+            _notify("Kowalski OS", answer)
         if speak and answer:
             try:
                 await voice_io.speak(answer)

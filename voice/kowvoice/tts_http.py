@@ -24,9 +24,9 @@ class HttpTtsClient:
     async def synthesize(self, text: str) -> AudioClip:
         import httpx
 
-        body: dict = {"text": text, "format": "wav"}
-        if self.engine:
-            body["engine"] = self.engine
+        # wachawo/text-to-speech accepts only {text, language?} and rejects unknown
+        # fields (Marshmallow strict) — sending "format"/"engine" returns 400.
+        body: dict = {"text": text}
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.post(f"{self.url}/api/tts", headers=self._headers(), json=body)
             resp.raise_for_status()
