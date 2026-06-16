@@ -97,16 +97,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "chat":
         from .chat import run_chat
 
-        return asyncio.run(
-            run_chat(
-                model=args.model or "",
-                yes=args.yes,
-                dry_run=args.dry_run,
-                conversation_id=args.conversation,
-                continue_=args.continue_,
-                speak=args.speak,
+        try:
+            return asyncio.run(
+                run_chat(
+                    model=args.model or "",
+                    yes=args.yes,
+                    dry_run=args.dry_run,
+                    conversation_id=args.conversation,
+                    continue_=args.continue_,
+                    speak=args.speak,
+                )
             )
-        )
+        except KeyboardInterrupt:
+            # asyncio.run() re-raises after run_chat's clean exit on Ctrl-C.
+            return 0
     parser.print_help()
     return 1
 

@@ -135,11 +135,13 @@ async def run_chat(
     else:
         print(f"{DIM}Type a message. 'quit' or Ctrl-D to exit.{RESET}")
 
-    aloop = asyncio.get_running_loop()
     try:
         while True:
             try:
-                line = await aloop.run_in_executor(None, input_fn, "kow› ")
+                # Synchronous input in the main thread: a run_in_executor() worker
+                # blocked on stdin is orphaned on Ctrl-C (SIGINT hits the main
+                # thread) and hangs the interpreter's atexit thread join.
+                line = input_fn("kow› ")
             except (EOFError, KeyboardInterrupt):
                 print()
                 break
