@@ -12,9 +12,20 @@ def _inputs(seq):
     return lambda prompt="": next(it)
 
 
+def test_default_mode_from_current_config():
+    assert cli._default_mode("ollama", {"OLLAMA_HOST": "http://h:11434"}) == "r"
+    assert cli._default_mode("stt", {}) == "s"
+    assert cli._default_mode("tts", {"TTS_URL": "http://h:5000"}) == "r"
+
+
 def test_choose_model_by_number(monkeypatch):
     monkeypatch.setattr(builtins, "input", _inputs(["2"]))
     assert cli._choose_model(["a", "b", "c"]) == "b"
+
+
+def test_choose_model_blank_keeps_current(monkeypatch):
+    monkeypatch.setattr(builtins, "input", _inputs([""]))
+    assert cli._choose_model(["a", "qwen3:8b"], current="qwen3:8b") == "qwen3:8b"
 
 
 def test_choose_model_blank_is_server_default(monkeypatch):
@@ -80,3 +91,31 @@ def test_ask_ollama_unreachable_then_skip_retry(mock_check, monkeypatch):
     monkeypatch.setattr(builtins, "input", _inputs(["badhost", "n", "qwen3:8b"]))
     entry = cli.ask_ollama()
     assert entry == {"mode": "remote", "url": "http://badhost:11434", "model": "qwen3:8b"}
+
+
+@patch("kow_setup.checks.check_ollama")
+def test_ask_ollama_blank_keeps_current_url_and_model(mock_check, monkeypatch):
+    mock_check.return_value = CheckResult(
+        service="ollama", ok=True, latency_ms=2, detail={"models": ["qwen3:8b", "qwen3:30b"]}
+    )
+    current = {"OLLAMA_HOST": "http://10.0.0.9:11434", "OLLAMA_MODEL": "qwen3:8b"}
+    # blank URL -> keep current; blank model choice -> keep current
+    monkeypatch.setattr(builtins, "input", _inputs(["", ""]))
+    entry = cli.ask_ollama(current)
+    assert entry == {"mode": "remote", "url": "http://10.0.0.9:11434", "model": "qwen3:8b"}
+    mock_check.assert_called_once_with("http://10.0.0.9:11434")
+
+
+def test_ask_http_service_blank_keeps_url_and_token(monkeypatch):
+    current = {"STT_URL": "http://10.16.69.251:5099", "STT_TOKEN": "secret", "STT_LANGUAGE": "ru"}
+    # blank url -> keep; blank token -> keep (not re-emitted); blank language -> keep
+    monkeypatch.setattr(builtins, "input", _inputs(["", "", ""]))
+    entry = cli.ask_http_service("stt", current)
+    assert entry["url"] == "http://10.16.69.251:5099"
+    assert entry["language"] == "ru"
+    assert "token" not in entry  # blank leaves the stored token untouched
+
+
+def test_ask_voice_blank_keeps_current(monkeypatch):
+    monkeypatch.setattr(builtins, "input", _inputs([""]))
+    assert cli.ask_voice({"KOW_WAKE_MODE": "both"}) == {}  # no updates -> config preserved
