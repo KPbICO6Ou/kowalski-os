@@ -83,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("settings", help="open the settings TUI (inputs + toggles)")
 
-    setup = sub.add_parser("setup", help="view/edit settings (kowalski.conf)")
+    setup = sub.add_parser("setup", help="settings TUI (no args) or show/get/set")
     setup_sub = setup.add_subparsers(dest="setup_command")
     setup_sub.add_parser("show", help="print every setting (short keys + values)")
     setup_get = setup_sub.add_parser("get", help="print one setting by short or full key")
@@ -119,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "setup":
         from . import settings_cli
 
+        if args.setup_command is None:
+            return settings_cli.cmd_settings_tui(args)
         if args.setup_command == "show":
             return settings_cli.cmd_setup_show(args)
         if args.setup_command == "get":
