@@ -106,6 +106,20 @@ def test_ask_ollama_blank_keeps_current_url_and_model(mock_check, monkeypatch):
     mock_check.assert_called_once_with("http://10.0.0.9:11434")
 
 
+def test_ask_http_service_normalizes_schemeless_url(monkeypatch):
+    # The reported bug: 'host:port' with no scheme must become a valid http URL.
+    monkeypatch.setattr(builtins, "input", _inputs(["10.16.69.251:5051", "", "ru"]))
+    entry = cli.ask_http_service("stt")
+    assert entry["url"] == "http://10.16.69.251:5051"
+    assert entry["language"] == "ru"
+
+
+def test_ask_http_service_adds_default_port(monkeypatch):
+    monkeypatch.setattr(builtins, "input", _inputs(["10.16.69.251", ""]))
+    entry = cli.ask_http_service("tts")
+    assert entry["url"] == "http://10.16.69.251:5000"
+
+
 def test_ask_http_service_blank_keeps_url_and_token(monkeypatch):
     current = {"STT_URL": "http://10.16.69.251:5099", "STT_TOKEN": "secret", "STT_LANGUAGE": "ru"}
     # blank url -> keep; blank token -> keep (not re-emitted); blank language -> keep

@@ -10,7 +10,7 @@ import yaml
 
 from . import __version__
 from .config import read_conf
-from .core import SERVICES, normalize_ollama_url, run
+from .core import SERVICE_DEFAULT_PORT, SERVICES, normalize_ollama_url, normalize_url, run
 
 DEFAULT_CONFIG = Path("~/.config/kowalski/kowalski.conf").expanduser()
 
@@ -93,7 +93,9 @@ def ask_http_service(service: str, current: dict | None = None) -> dict:
     """Prompt for an STT/TTS remote endpoint (URL + optional token/language)."""
     current = current or {}
     cur_url = current.get(SERVICE_URL_KEY[service], "")
-    url = input(f"  {service} URL{_hint(cur_url)}: ").strip() or cur_url
+    port = SERVICE_DEFAULT_PORT[service]
+    raw_url = input(f"  {service} URL (host[:port], default port {port}){_hint(cur_url)}: ").strip()
+    url = normalize_url(raw_url or cur_url, port)
     entry: dict = {"mode": "remote", "url": url}
     # A blank token leaves any configured token untouched (write_conf preserves it).
     has_token = bool(current.get(f"{service.upper()}_TOKEN"))

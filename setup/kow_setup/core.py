@@ -15,12 +15,14 @@ from .config import write_conf
 SERVICES = ("ollama", "stt", "tts")
 WAKE_MODES = ("push_to_talk", "wake_word", "both")
 OLLAMA_DEFAULT_PORT = 11434
+# Per-service default port appended when the user gives a host with no port.
+SERVICE_DEFAULT_PORT = {"ollama": OLLAMA_DEFAULT_PORT, "stt": 5099, "tts": 5000}
 
 
-def normalize_ollama_url(url: str, default_port: int = OLLAMA_DEFAULT_PORT) -> str:
-    """Add `http://` when the scheme is missing and `:11434` when no port is
-    given. '127.0.0.1' -> 'http://127.0.0.1:11434'; an explicit port like
-    '127.0.0.1:12345' is kept as-is."""
+def normalize_url(url: str, default_port: int) -> str:
+    """Add `http://` when the scheme is missing and `:<default_port>` when no
+    port is given. '10.0.0.5' -> 'http://10.0.0.5:<port>'; an explicit port like
+    '10.0.0.5:5051' is kept (only the scheme is added)."""
     url = url.strip()
     if not url:
         return url
@@ -37,6 +39,11 @@ def normalize_ollama_url(url: str, default_port: int = OLLAMA_DEFAULT_PORT) -> s
             netloc = f"{cred}@{netloc}"
         parsed = parsed._replace(netloc=netloc)
     return urlunparse(parsed).rstrip("/")
+
+
+def normalize_ollama_url(url: str, default_port: int = OLLAMA_DEFAULT_PORT) -> str:
+    """Ollama-specific wrapper around :func:`normalize_url` (default port 11434)."""
+    return normalize_url(url, default_port)
 
 
 @dataclass
@@ -56,8 +63,8 @@ def parse_answers(raw: dict) -> dict[str, ServiceAnswer]:
         if mode not in ("local", "remote", "skip"):
             raise ValueError(f"{service}: invalid mode '{mode}'")
         url = entry.get("url", "")
-        if service == "ollama" and url:
-            url = normalize_ollama_url(url)
+        if url and service in SERVICE_DEFAULT_PORT:
+            url = normalize_url(url, SERVICE_DEFAULT_PORT[service])
         answers[service] = ServiceAnswer(
             mode=mode,
             url=url,

@@ -4,7 +4,13 @@ from unittest.mock import patch
 import pytest
 
 from kow_setup.checks import CheckResult
-from kow_setup.core import build_voice_updates, normalize_ollama_url, parse_answers, run
+from kow_setup.core import (
+    build_voice_updates,
+    normalize_ollama_url,
+    normalize_url,
+    parse_answers,
+    run,
+)
 
 
 def answers_remote_ollama() -> dict:
@@ -89,6 +95,30 @@ def test_parse_answers_normalizes_ollama_url():
     assert answers["ollama"].url == "http://127.0.0.1:12345"
     answers = parse_answers({"ollama": {"mode": "remote", "url": "10.0.0.5"}})
     assert answers["ollama"].url == "http://10.0.0.5:11434"
+
+
+@pytest.mark.parametrize(
+    "url, port, expected",
+    [
+        ("10.16.69.251:5051", 5099, "http://10.16.69.251:5051"),  # scheme added, port kept
+        ("10.16.69.251", 5099, "http://10.16.69.251:5099"),       # stt default port
+        ("10.16.69.251", 5000, "http://10.16.69.251:5000"),       # tts default port
+        ("https://stt.local", 5099, "https://stt.local:5099"),
+    ],
+)
+def test_normalize_url(url, port, expected):
+    assert normalize_url(url, port) == expected
+
+
+def test_parse_answers_normalizes_stt_tts_urls():
+    answers = parse_answers(
+        {
+            "stt": {"mode": "remote", "url": "10.16.69.251:5051"},
+            "tts": {"mode": "remote", "url": "10.16.69.251"},
+        }
+    )
+    assert answers["stt"].url == "http://10.16.69.251:5051"  # scheme added (the reported bug)
+    assert answers["tts"].url == "http://10.16.69.251:5000"  # default tts port
 
 
 def test_build_voice_updates_maps_keys():
