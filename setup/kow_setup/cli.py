@@ -76,7 +76,34 @@ def ask_interactively() -> dict:
             raw[service] = entry
         else:
             raw[service] = {"mode": "skip"}
+
+    voice = ask_voice()
+    if voice:
+        raw["voice"] = voice
     return raw
+
+
+def ask_voice() -> dict:
+    """Optional wake-activation prompt (push-to-talk / wake word / both)."""
+    print("\nVoice activation (optional):")
+    choice = input(
+        "  wake mode [p]ush-to-talk / [w]ake-word / [b]oth / [s]kip? "
+    ).strip().lower()
+    if not choice or choice.startswith("s"):
+        return {}
+    mode = {"p": "push_to_talk", "w": "wake_word", "b": "both"}.get(choice[0])
+    if mode is None:
+        return {}
+    voice: dict = {"wake_mode": mode}
+    if mode in ("wake_word", "both"):
+        word = input(
+            "  wake word (pretrained name) or path to a .onnx/.tflite model "
+            "[hey_kowalski]: "
+        ).strip()
+        if word:
+            key = "wake_model" if any(s in word for s in (".onnx", ".tflite", "/")) else "wake_word"
+            voice[key] = word
+    return voice
 
 
 if __name__ == "__main__":

@@ -112,14 +112,14 @@ async def cmd_demo(barge_in: bool) -> int:
 
 def _build_real_pipeline(settings: VoiceSettings):
     from .agent_socket import SocketAgentSession
-    from .audio_devices import EnergyVadRecorder, PushToTalkWake, SoundDeviceSink
+    from .audio_devices import EnergyVadRecorder, SoundDeviceSink, build_wake
     from .mocks import MockInterrupter  # barge-in mic monitor is a future upgrade
     from .stt_http import HttpSttClient
     from .tts_http import HttpTtsClient
     from .orchestrator import VoiceOrchestrator
 
     return VoiceOrchestrator(
-        wake=PushToTalkWake(),
+        wake=build_wake(settings),
         recorder=EnergyVadRecorder(settings.sample_rate, settings.vad_silence_ms),
         stt=HttpSttClient(settings.stt_url, settings.stt_token),
         agent=SocketAgentSession(settings.socket_path),
@@ -131,8 +131,35 @@ def _build_real_pipeline(settings: VoiceSettings):
     )
 
 
+def _require_mic() -> str | None:
+    """Return an error string if the [mic] audio stack is missing, else None."""
+    import importlib.util
+
+    missing = [m for m in ("sounddevice", "numpy") if importlib.util.find_spec(m) is None]
+    if missing:
+        return (
+            f"voice hardware stack unavailable (missing: {', '.join(missing)}). "
+            "Install the mic extra: pip install -e 'voice[mic]'"
+        )
+    return None
+
+
 async def cmd_run() -> int:
     settings = VoiceSettings.load()
+    err = _require_mic()
+    if err:
+        print(err, file=sys.stderr)
+        return 2
+    if settings.wake_mode.lower() in ("wake_word", "both"):
+        import importlib.util
+
+        if importlib.util.find_spec("openwakeword") is None:
+            print(
+                "wake word needs openWakeWord (in the mic extra): "
+                "pip install -e 'voice[mic]'",
+                file=sys.stderr,
+            )
+            return 2
     try:
         orchestrator = _build_real_pipeline(settings)
     except ImportError as exc:
@@ -142,7 +169,7 @@ async def cmd_run() -> int:
             file=sys.stderr,
         )
         return 2
-    print("kow-voice running (Ctrl-C to stop)")
+    print(f"kow-voice running — wake mode: {settings.wake_mode} (Ctrl-C to stop)")
     try:
         await orchestrator.run()
     except KeyboardInterrupt:

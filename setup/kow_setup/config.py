@@ -14,6 +14,9 @@ MANAGED_KEYS = (
     "STT_LANGUAGE",
     "TTS_URL",
     "TTS_TOKEN",
+    "KOW_WAKE_MODE",
+    "KOW_WAKE_WORD",
+    "KOW_WAKE_MODEL",
 )
 
 

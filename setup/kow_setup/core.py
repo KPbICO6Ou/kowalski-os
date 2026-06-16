@@ -12,6 +12,7 @@ from .checks import CheckResult, check_ollama, check_stt, check_tts
 from .config import write_conf
 
 SERVICES = ("ollama", "stt", "tts")
+WAKE_MODES = ("push_to_talk", "wake_word", "both")
 
 
 @dataclass
@@ -82,9 +83,29 @@ def build_config_updates(answers: dict[str, ServiceAnswer]) -> dict[str, str]:
     return updates
 
 
+def build_voice_updates(raw_answers: dict) -> dict[str, str]:
+    """Voice activation has no service check — it's pure config. Maps the
+    optional `voice` answers section to KOW_WAKE_* keys."""
+    voice = raw_answers.get("voice") or {}
+    mode = voice.get("wake_mode")
+    if mode and mode not in WAKE_MODES:
+        raise ValueError(f"voice: invalid wake_mode '{mode}'")
+    updates: dict[str, str] = {}
+    for key, conf_key in (
+        ("wake_mode", "KOW_WAKE_MODE"),
+        ("wake_word", "KOW_WAKE_WORD"),
+        ("wake_model", "KOW_WAKE_MODEL"),
+    ):
+        value = voice.get(key)
+        if value:
+            updates[conf_key] = str(value)
+    return updates
+
+
 def run(raw_answers: dict, config_path: Path, accept_warnings: bool = False) -> tuple[int, list[CheckResult]]:
     """Returns (exit_code, results). Config is written only on success."""
     answers = parse_answers(raw_answers)
+    voice_updates = build_voice_updates(raw_answers)  # validate before any checks
     results = run_checks(answers)
 
     failed = [r for r in results if not r.ok]
@@ -92,6 +113,7 @@ def run(raw_answers: dict, config_path: Path, accept_warnings: bool = False) -> 
         return 1, results
 
     updates = build_config_updates(answers)
+    updates.update(voice_updates)
     if updates:
         write_conf(config_path, updates)
     return 0, results

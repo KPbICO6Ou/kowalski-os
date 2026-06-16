@@ -28,8 +28,9 @@ each spoken sentence, and the final answer.
 
 ```sh
 pip install -e 'voice[mic]'     # sounddevice + numpy + openwakeword
+kow-setup                        # set STT/TTS endpoints + wake activation (writes kowalski.conf)
 kow-voice check                 # probe STT, TTS, and the kow-core socket
-kow-voice run                   # push-to-talk → STT → agent → TTS → playback
+kow-voice run                   # wake → STT → agent → TTS → playback
 ```
 
 `run` uses the real adapters: an HTTP STT client (wachawo/speech-to-text,
@@ -39,22 +40,37 @@ agent, and sounddevice for capture/playback. Tool-call confirmations are
 auto-denied over voice (no GUI to approve), so destructive actions are blocked by
 design in this mode.
 
-The shipped wake/VAD adapters are deliberately simple — **push-to-talk** (press
-Enter) and an **RMS energy VAD** — so `run` works on a stock Linux box today.
-openWakeWord and silero-vad are the production upgrades (see `audio_devices.py`),
-and the Super+Space / always-listening wake arrives with the XFCE integration.
+### Wake activation
+
+`KOW_WAKE_MODE` chooses how a turn starts:
+
+| Mode | Trigger |
+|---|---|
+| `push_to_talk` (default) | press **Enter** — no model, works everywhere |
+| `wake_word` | openWakeWord listens for `KOW_WAKE_MODEL` (or `KOW_WAKE_WORD`) |
+| `both` | Enter **or** the wake word, whichever comes first |
+
+openWakeWord ships/downloads pretrained names (`hey_jarvis`, `alexa`, …). A
+custom phrase such as **"kowalski" needs a trained model file** — train one with
+the openWakeWord notebook and point `KOW_WAKE_MODEL` at its `.onnx`/`.tflite`.
+Until then, use `both` so push-to-talk always works while you dial in the model.
+The RMS energy VAD endpoints utterances; silero-vad is the production upgrade.
 
 ## Configuration
 
 `VoiceSettings.load()` resolves, highest priority first: environment variables →
 `./ttsgen.conf` → `~/.config/ttsgen.conf` (the native wachawo TTS config chain) →
-kow-core's `kowalski.conf` (for the socket path) → defaults.
+kow-core's `kowalski.conf` (what `kow-setup` writes — STT/TTS/wake/socket) →
+defaults.
 
 | Key | Default | Meaning |
 |---|---|---|
 | `STT_URL` / `STT_TOKEN` / `STT_LANGUAGE` | `http://127.0.0.1:5099` / — / server default | speech-to-text endpoint |
 | `TTS_URL` / `TTS_TOKEN` / `TTS_ENGINE` | `http://127.0.0.1:5000` / — / server default | text-to-speech endpoint |
-| `KOW_WAKE_WORD` | `hey_kowalski` | openWakeWord model name |
+| `KOW_WAKE_MODE` | `push_to_talk` | `push_to_talk` / `wake_word` / `both` |
+| `KOW_WAKE_WORD` | `hey_kowalski` | openWakeWord pretrained model name |
+| `KOW_WAKE_MODEL` | — | path to a custom `.onnx`/`.tflite` wake model |
+| `KOW_WAKE_THRESHOLD` | `0.5` | detection score required to fire |
 | `KOW_VOICE_SAMPLE_RATE` | `16000` | capture sample rate |
 | `KOW_VAD_SILENCE_MS` | `700` | trailing silence that ends an utterance |
 | `KOW_BARGE_IN` | `1` | allow interrupting the agent mid-answer |

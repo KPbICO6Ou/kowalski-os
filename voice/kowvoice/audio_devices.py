@@ -10,29 +10,114 @@ Endpointing: a simple RMS energy VAD; silero-vad is the production upgrade."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
 
 from .types import AudioClip, Utterance
 
 
 class PushToTalkWake:
-    """Dependency-free wake: press Enter to start a turn. Lets `kow-voice run`
-    work on any Linux box before openWakeWord models are wired in."""
+    """Dependency-free wake: press Enter to start a turn. Works on any box and
+    is the fallback half of the `both` wake mode."""
 
     async def wait_for_wake(self) -> None:
         await asyncio.get_running_loop().run_in_executor(None, input, "[press Enter to talk] ")
 
 
 class OpenWakeWordListener:
-    """Production wake word via openWakeWord (needs the [mic] extra + a model)."""
+    """Spoken wake word via openWakeWord (needs the [mic] extra).
 
-    def __init__(self, model: str, sample_rate: int = 16000) -> None:
+    `model` is either a pretrained model name openWakeWord ships/downloads
+    (e.g. "hey_jarvis", "alexa") or a path to a custom .onnx/.tflite model. A
+    bespoke phrase such as "kowalski" requires a trained model file — point
+    `model` at its path."""
+
+    def __init__(self, model: str, sample_rate: int = 16000, threshold: float = 0.5) -> None:
         self.model = model
         self.sample_rate = sample_rate
+        self.threshold = threshold
+        self._oww = None
+
+    def _load(self):
+        from openwakeword.model import Model
+
+        model = self.model
+        if model.endswith(".onnx"):
+            return Model(wakeword_models=[model], inference_framework="onnx")
+        if model.endswith(".tflite"):
+            return Model(wakeword_models=[model], inference_framework="tflite")
+        if model:
+            return Model(wakeword_models=[model])
+        return Model()
 
     async def wait_for_wake(self) -> None:  # pragma: no cover - needs hardware + model
-        raise NotImplementedError(
-            "openWakeWord integration pending; use PushToTalkWake or `kow-voice demo`"
+        import numpy as np
+        import sounddevice as sd
+
+        if self._oww is None:
+            self._oww = self._load()
+
+        frame = 1280  # openWakeWord expects 80 ms frames at 16 kHz
+        loop = asyncio.get_running_loop()
+        stream = sd.RawInputStream(
+            samplerate=self.sample_rate, channels=1, dtype="int16", blocksize=frame
         )
+        stream.start()
+        try:
+            while True:
+                data, _ = await loop.run_in_executor(None, stream.read, frame)
+                pcm = np.frombuffer(bytes(data), dtype=np.int16)
+                scores = self._oww.predict(pcm)
+                if scores and max(scores.values()) >= self.threshold:
+                    return
+        finally:
+            stream.stop()
+            stream.close()
+
+
+class CombinedWake:
+    """Fire when ANY of the wrapped listeners fires (push-to-talk OR wake word).
+
+    A listener that errors (e.g. openWakeWord can't load its model) is dropped so
+    the surviving listeners keep working; if every listener errors, the first
+    error is raised."""
+
+    def __init__(self, listeners) -> None:
+        self.listeners = list(listeners)
+
+    async def wait_for_wake(self) -> None:
+        tasks = [asyncio.create_task(listener.wait_for_wake()) for listener in self.listeners]
+        errors: list[BaseException] = []
+        try:
+            pending = set(tasks)
+            while pending:
+                done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    exc = task.exception()
+                    if exc is None:
+                        return
+                    errors.append(exc)
+            raise errors[0]
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            for task in tasks:
+                with contextlib.suppress(BaseException):
+                    await task
+
+
+def build_wake(settings):
+    """Pick the wake listener from settings.wake_mode."""
+    mode = (settings.wake_mode or "push_to_talk").lower()
+    if mode == "push_to_talk":
+        return PushToTalkWake()
+    model = settings.wake_model or settings.wake_word
+    oww = OpenWakeWordListener(model, settings.sample_rate, settings.wake_threshold)
+    if mode == "wake_word":
+        return oww
+    if mode == "both":
+        return CombinedWake([PushToTalkWake(), oww])
+    return PushToTalkWake()
 
 
 class EnergyVadRecorder:

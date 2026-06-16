@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from kow_setup.checks import CheckResult
-from kow_setup.core import parse_answers, run
+from kow_setup.core import build_voice_updates, parse_answers, run
 
 
 def answers_remote_ollama() -> dict:
@@ -62,3 +62,31 @@ def test_all_skip_writes_nothing(tmp_path: Path):
 def test_local_mode_not_implemented(tmp_path: Path):
     with pytest.raises(NotImplementedError):
         run({"ollama": {"mode": "local"}}, tmp_path / "c.conf")
+
+
+def test_build_voice_updates_maps_keys():
+    updates = build_voice_updates(
+        {"voice": {"wake_mode": "both", "wake_word": "hey_kowalski", "wake_model": "/m/k.onnx"}}
+    )
+    assert updates == {
+        "KOW_WAKE_MODE": "both",
+        "KOW_WAKE_WORD": "hey_kowalski",
+        "KOW_WAKE_MODEL": "/m/k.onnx",
+    }
+
+
+def test_build_voice_updates_empty_when_absent():
+    assert build_voice_updates({}) == {}
+
+
+def test_build_voice_updates_invalid_mode():
+    with pytest.raises(ValueError, match="invalid wake_mode"):
+        build_voice_updates({"voice": {"wake_mode": "telepathy"}})
+
+
+def test_voice_only_setup_writes_wake_config(tmp_path: Path):
+    conf = tmp_path / "kowalski.conf"
+    code, results = run({"voice": {"wake_mode": "both"}}, conf)
+    assert code == 0
+    assert results == []
+    assert "KOW_WAKE_MODE=both" in conf.read_text()
