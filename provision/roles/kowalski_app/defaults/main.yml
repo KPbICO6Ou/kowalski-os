@@ -1,0 +1,27 @@
+---
+# Account to deploy Kowalski OS under (also the SSH user for remote targets).
+# Overridden by deploy.sh via -e kow_user=<username>.
+kow_user: "{{ ansible_user_id }}"
+kow_home: "/home/{{ kow_user }}"
+
+# Where the repo is cloned and the bundled venv lives.
+kow_prefix: /opt/KowalskiOS
+kow_repo: https://github.com/KPbICO6Ou/kowalski-os.git
+kow_version: main
+kow_extras: "[api,pydantic-ai]"   # core extras installed into the venv
+
+# Agent configuration written to ~/.config/kowalski/kowalski.conf.
+# Generic defaults (local Ollama, project defaults). Override per environment
+# with -e, e.g. a remote Ollama box:
+#   -e kow_ollama_host=http://10.0.0.5:11434 -e kow_ollama_model=qwen3:8b \
+#   -e kow_embed_model=bge-m3 -e kow_vision=0
+kow_ollama_host: "http://127.0.0.1:11434"
+kow_ollama_model: "qwen2.5:7b"
+kow_embed_model: "nomic-embed-text"
+kow_vision: "1"
+kow_allowed_paths: "{{ kow_home }}"
+
+kow_manage_conf: true   # false: deploy code/service but leave a hand-tuned conf alone
+kow_theme: true         # install XFCE theme + first-login onboarding
+kow_backup: true        # take a pre-deploy profile backup (for rollback)
+kow_service: true       # install + enable the kowalski-core user service

@@ -48,6 +48,34 @@ manually; the docker/ollama/desktop roles work as-is. The Docker smoke test on
 Apple Silicon runs in an arm64 container, so the arm64 role branches are
 exercised locally on every run.
 
+## Deploy the app onto an existing machine
+
+`provision/deploy.yml` (run via `provision/deploy.sh`) installs just the Kowalski
+agent onto a host that already has a desktop — it clones the repo into
+`/opt/KowalskiOS`, builds a venv, installs the packages, writes the config,
+links the `kow*` launchers into `/usr/local/bin`, enables the `kowalski-core`
+systemd **user** service, and installs the XFCE theme + onboarding. The LLM
+(Ollama) is *configured*, not installed.
+
+```bash
+./provision/deploy.sh <username> [addr]      # addr optional, default 127.0.0.1
+```
+
+```bash
+./provision/deploy.sh alice                  # deploy locally as alice
+./provision/deploy.sh alice 10.0.0.5         # deploy to a remote host over SSH
+# point at a remote Ollama and pick models (extra args pass through to ansible):
+./provision/deploy.sh alice 10.0.0.5 \
+    -e kow_ollama_host=http://10.0.0.6:11434 -e kow_ollama_model=qwen3:8b \
+    -e kow_embed_model=bge-m3 -e kow_vision=0
+```
+
+It is idempotent (re-running converges to `changed=0`, aside from the optional
+pre-deploy profile backup). Useful overrides: `kow_manage_conf=false` (leave a
+hand-tuned `kowalski.conf` alone), `kow_theme=false`, `kow_service=false`,
+`kow_backup=false`, `kow_prefix=/opt/...`, `kow_version=<branch/tag>`. The
+pre-deploy backup lands in `~/kowalski-backups/` for rollback.
+
 ## Smoke testing without hardware
 
 ```bash

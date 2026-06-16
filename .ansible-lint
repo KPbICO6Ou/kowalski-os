@@ -7,3 +7,6 @@ exclude_paths:
 
 skip_list:
   - galaxy[no-changelog]
+  # Keep short, user-facing var names (kow_*) so -e overrides on the deploy CLI
+  # stay ergonomic, rather than role-prefixed kowalski_app_* names.
+  - var-naming[no-role-prefix]

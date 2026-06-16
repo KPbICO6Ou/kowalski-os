@@ -18,6 +18,7 @@ lint:
 
 syntax:
 	$(BIN)/ansible-playbook --syntax-check $(PLAYBOOK) -i $(INVENTORY)
+	$(BIN)/ansible-playbook --syntax-check provision/deploy.yml -i 'localhost,' -c local -e kow_user=ci
 
 test: test-core test-setup test-ui test-indexer test-voice
 

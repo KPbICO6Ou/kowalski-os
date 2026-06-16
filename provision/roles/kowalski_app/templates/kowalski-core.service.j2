@@ -1,0 +1,13 @@
+[Unit]
+Description=Kowalski OS agent core daemon
+ConditionPathExists={{ kow_prefix }}/.venv/bin/kow
+
+[Service]
+Type=simple
+ExecStart={{ kow_prefix }}/.venv/bin/kow serve
+Restart=on-failure
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

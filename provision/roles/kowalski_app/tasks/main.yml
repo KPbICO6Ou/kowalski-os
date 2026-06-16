@@ -1,0 +1,201 @@
+---
+# Deploy the Kowalski OS app onto an existing Ubuntu host: clone the repo into a
+# prefix, build a bundled venv, install the packages, write the config, install
+# /usr/local/bin launchers, the systemd user service, and the XFCE theme. The
+# remote LLM (Ollama) is configured, not installed. Idempotent.
+
+- name: Install build prerequisites
+  become: true
+  ansible.builtin.apt:
+    name: [git, python3-venv, python3-pip]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Pre-deploy profile backup (for rollback)
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.script: backup-profile.sh
+  register: kow_backup_result
+  changed_when: true
+  when: kow_backup | bool
+  tags: [backup]
+
+- name: Report backup location
+  ansible.builtin.debug:
+    msg: "{{ kow_backup_result.stdout_lines | default([]) | select('search', 'BACKUP_TAR') | list }}"
+  when: kow_backup | bool
+
+- name: Create the install prefix
+  become: true
+  ansible.builtin.file:
+    path: "{{ kow_prefix }}"
+    state: directory
+    owner: "{{ kow_user }}"
+    group: "{{ kow_user }}"
+    mode: "0755"
+
+- name: Clone or update the repository
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.git:
+    repo: "{{ kow_repo }}"
+    dest: "{{ kow_prefix }}"
+    version: "{{ kow_version }}"
+    depth: 1
+    update: true
+  register: kow_git
+
+- name: Check whether the venv is already built
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.stat:
+    path: "{{ kow_prefix }}/.venv/bin/kow"
+  register: kow_venv
+
+- name: Build the venv and install the packages
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.shell: |
+    set -e
+    python3 -m venv "{{ kow_prefix }}/.venv"
+    "{{ kow_prefix }}/.venv/bin/pip" install --upgrade pip
+    "{{ kow_prefix }}/.venv/bin/pip" install \
+      "{{ kow_prefix }}/core{{ kow_extras }}" \
+      "{{ kow_prefix }}/indexer" \
+      "{{ kow_prefix }}/ui" \
+      "{{ kow_prefix }}/voice" \
+      "{{ kow_prefix }}/setup"
+  args:
+    executable: /bin/bash
+  register: kow_install
+  changed_when: true
+  when: (kow_git is changed) or (not kow_venv.stat.exists)
+
+- name: Link the CLI launchers into /usr/local/bin
+  become: true
+  ansible.builtin.file:
+    src: "{{ kow_prefix }}/.venv/bin/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+    force: true
+  loop: [kow, kow-omni, kow-voice, kow-index, kow-setup, kow-clip]
+
+- name: Ensure the config directory exists
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.file:
+    path: "{{ kow_home }}/.config/kowalski"
+    state: directory
+    mode: "0700"
+
+- name: Write kowalski.conf
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.template:
+    src: kowalski.conf.j2
+    dest: "{{ kow_home }}/.config/kowalski/kowalski.conf"
+    mode: "0600"
+  when: kow_manage_conf | bool
+
+# -- systemd user service ----------------------------------------------------
+
+- name: Resolve the user's uid
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.command: id -u
+  register: kow_uid
+  changed_when: false
+  when: kow_service | bool
+
+- name: Check linger state
+  become: true
+  ansible.builtin.command: "loginctl show-user {{ kow_user }} -p Linger"
+  register: kow_linger
+  changed_when: false
+  failed_when: false
+  when: kow_service | bool
+
+- name: Enable linger (run the user service without an active login)
+  become: true
+  ansible.builtin.command: "loginctl enable-linger {{ kow_user }}"
+  changed_when: true
+  when: kow_service | bool and 'Linger=yes' not in (kow_linger.stdout | default(''))
+
+- name: Ensure the user systemd directory exists
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.file:
+    path: "{{ kow_home }}/.config/systemd/user"
+    state: directory
+    mode: "0755"
+  when: kow_service | bool
+
+- name: Install the kowalski-core user unit
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.template:
+    src: kowalski-core.service.j2
+    dest: "{{ kow_home }}/.config/systemd/user/kowalski-core.service"
+    mode: "0644"
+  when: kow_service | bool
+
+- name: Enable and start kowalski-core (user scope)
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.systemd_service:
+    name: kowalski-core.service
+    scope: user
+    daemon_reload: true
+    enabled: true
+    state: started
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ kow_uid.stdout }}"
+  when: kow_service | bool
+
+# -- XFCE theme + first-login onboarding -------------------------------------
+
+- name: Create the shared theme directory
+  become: true
+  ansible.builtin.file:
+    path: /usr/share/kowalski
+    state: directory
+    mode: "0755"
+  when: kow_theme | bool
+
+- name: Install the theme script
+  become: true
+  ansible.builtin.copy:
+    remote_src: true
+    src: "{{ kow_prefix }}/packaging/theme/apply-theme.sh"
+    dest: /usr/share/kowalski/apply-theme.sh
+    mode: "0755"
+  when: kow_theme | bool
+
+- name: Install the onboarding launcher
+  become: true
+  ansible.builtin.copy:
+    remote_src: true
+    src: "{{ kow_prefix }}/packaging/theme/kowalski-onboarding"
+    dest: /usr/local/bin/kowalski-onboarding
+    mode: "0755"
+  when: kow_theme | bool
+
+- name: Ensure the autostart directory exists
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.file:
+    path: "{{ kow_home }}/.config/autostart"
+    state: directory
+    mode: "0755"
+  when: kow_theme | bool
+
+- name: Install the onboarding autostart entry
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.copy:
+    remote_src: true
+    src: "{{ kow_prefix }}/packaging/theme/kowalski-onboarding.desktop"
+    dest: "{{ kow_home }}/.config/autostart/kowalski-onboarding.desktop"
+    mode: "0644"
+  when: kow_theme | bool

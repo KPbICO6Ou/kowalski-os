@@ -1,0 +1,14 @@
+---
+# Deploy the Kowalski OS app onto an existing Ubuntu host (the LLM/Ollama is
+# configured, not installed). Run it with provision/deploy.sh, e.g.:
+#   ./provision/deploy.sh alice                 # localhost
+#   ./provision/deploy.sh alice 10.0.0.5        # remote host
+# Override the agent config per environment with -e, e.g. a remote Ollama:
+#   ./provision/deploy.sh alice 10.0.0.5 \
+#       -e kow_ollama_host=http://10.0.0.6:11434 -e kow_ollama_model=qwen3:8b \
+#       -e kow_embed_model=bge-m3 -e kow_vision=0
+- name: Deploy Kowalski OS
+  hosts: all
+  gather_facts: true
+  roles:
+    - kowalski_app
