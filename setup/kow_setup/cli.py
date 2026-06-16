@@ -198,7 +198,7 @@ def _choose_model(models: list[str], current: str = "") -> str:
     for index, name in enumerate(models, start=1):
         marker = "  (current)" if name == current else ""
         print(f"    {index}) {name}{marker}")
-    keep = "keep current" if current else "server default"
+    keep = f"keep current ({current})" if current else "server default"
     choice = input(f"  choose [number or name, blank = {keep}]: ").strip()
     if not choice:
         return current

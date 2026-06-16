@@ -28,6 +28,18 @@ def test_choose_model_blank_keeps_current(monkeypatch):
     assert cli._choose_model(["a", "qwen3:8b"], current="qwen3:8b") == "qwen3:8b"
 
 
+def test_choose_model_prompt_shows_current_name(monkeypatch):
+    seen = []
+
+    def recording_input(prompt=""):
+        seen.append(prompt)
+        return ""
+
+    monkeypatch.setattr(builtins, "input", recording_input)
+    cli._choose_model(["a", "qwen3:8b"], current="qwen3:8b")
+    assert "keep current (qwen3:8b)" in seen[-1]
+
+
 def test_choose_model_blank_is_server_default(monkeypatch):
     monkeypatch.setattr(builtins, "input", _inputs([""]))
     assert cli._choose_model(["a", "b"]) == ""
