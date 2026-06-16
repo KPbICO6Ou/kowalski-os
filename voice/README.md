@@ -31,9 +31,15 @@ pip install -e 'voice[mic]'         # sounddevice + numpy + onnxruntime + helper
 pip install --no-deps openwakeword  # only for wake_word/both modes (see note below)
 kow-setup                            # set STT/TTS endpoints + wake activation (writes kowalski.conf)
 kow-voice check                     # probe STT, TTS, and the kow-core socket
+kow-voice test                      # round-trip self-test: greet → record → STT → echo back
 kow-voice run                       # wake → STT → agent → TTS → playback
 kow-voice chat                      # voice + text in one conversation (type OR press Enter to talk)
 ```
+
+`kow-voice test` greets you ("say something"), records one phrase, transcribes
+it, and speaks it back ("you said …") — a quick check that mic → STT → TTS all
+work end to end. On any failure it probes STT/TTS/core and asks the LLM to
+diagnose the problem from the error + settings + check results.
 
 ### Voice + text chat
 

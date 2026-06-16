@@ -53,6 +53,9 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("run", help="real pipeline (mic + STT/TTS + kow-core)")
     sub.add_parser("check", help="probe STT/TTS/kow-core connectivity")
+    sub.add_parser(
+        "test", help="round-trip self-test: greet → record → STT → echo (LLM diagnosis on failure)"
+    )
 
     chat = sub.add_parser("chat", help="voice + text chat (type or talk; answers printed + spoken)")
     chat.add_argument("--model", help="override OLLAMA_MODEL")
@@ -69,6 +72,10 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(cmd_run())
     if args.command == "check":
         return asyncio.run(cmd_check())
+    if args.command == "test":
+        from .selftest import run_test
+
+        return asyncio.run(run_test())
     if args.command == "chat":
         from .chat import run_chat
 
