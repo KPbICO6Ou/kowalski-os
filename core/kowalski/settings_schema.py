@@ -34,7 +34,7 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("temp", "KOW_TEMPERATURE", "Ollama", "text", "Sampling temperature"),
     Setting("stt", "STT_URL", "STT", "text", "Speech-to-text endpoint URL"),
     Setting("stt-token", "STT_TOKEN", "STT", "secret", "STT auth token"),
-    Setting("lang", "STT_LANGUAGE", "STT", "text", "STT language, e.g. ru / en"),
+    Setting("stt-lang", "STT_LANGUAGE", "STT", "text", "STT language, e.g. ru / en"),
     Setting("tts", "TTS_URL", "TTS", "text", "Text-to-speech endpoint URL"),
     Setting("tts-token", "TTS_TOKEN", "TTS", "secret", "TTS auth token"),
     Setting("wake", "KOW_WAKE_MODE", "Voice", "enum", "How a voice turn starts",
