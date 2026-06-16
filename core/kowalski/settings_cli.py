@@ -144,6 +144,8 @@ def _put(stdscr, y: int, x: int, text: str, attr: int = 0) -> None:
 
 SHORT_W = max(len(s.short) for s in SETTINGS)
 VALUE_COL = 4 + SHORT_W + 2
+VALW = 26                       # value column width in the TUI
+ENV_COL = VALUE_COL + VALW + 2  # the env-variable (full KEY) column
 
 
 def _edit_text(stdscr, y: int, initial: str, masked: bool) -> str | None:
@@ -179,8 +181,9 @@ def _tui_loop(stdscr, work: dict, original: dict, path) -> None:
     saved = False
     while True:
         stdscr.erase()
-        _put(stdscr, 0, 2, "Kowalski settings", curses.A_BOLD)
+        _put(stdscr, 0, 2, "kow setup — settings", curses.A_BOLD)
         _put(stdscr, 1, 2, str(path), curses.A_DIM)
+        _put(stdscr, 2, 4, f"{'key':<{SHORT_W}}  {'value':<{VALW}}  env variable", curses.A_DIM)
         row = 3
         rows: dict[int, int] = {}
         last_group = None
@@ -190,8 +193,12 @@ def _tui_loop(stdscr, work: dict, original: dict, path) -> None:
                 row += 1
                 last_group = s.group
             attr = curses.A_REVERSE if i == sel else 0
+            val = _display(s, work[s.key])
+            if len(val) > VALW:
+                val = val[: VALW - 1] + "…"
             _put(stdscr, row, 4, f"{s.short:<{SHORT_W}}", attr)
-            _put(stdscr, row, VALUE_COL, _display(s, work[s.key]), attr)
+            _put(stdscr, row, VALUE_COL, f"{val:<{VALW}}", attr)
+            _put(stdscr, row, ENV_COL, s.key, curses.A_DIM)
             rows[i] = row
             row += 1
 
