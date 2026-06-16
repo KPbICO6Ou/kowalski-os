@@ -281,18 +281,24 @@ async def cmd_chat(args) -> int:
     suffix = " (resumed)" if resumed else ""
     print(
         f"{DIM}kow chat — conversation {conversation_id}{suffix}. "
-        f"Type 'exit' or press Ctrl-D to quit.{RESET}"
+        f"Type 'quit' (or 'exit') or press Ctrl-C twice to leave.{RESET}"
     )
+    pending_quit = False  # one Ctrl-C arms quit; a second consecutive one confirms
     try:
         while True:
             try:
                 line = input("kow› ")
-            except EOFError:
+            except EOFError:  # Ctrl-D
                 print()
                 break
             except KeyboardInterrupt:
-                print()
+                if pending_quit:
+                    print()
+                    break
+                pending_quit = True
+                print(f"\n{DIM}(press Ctrl-C again to quit){RESET}")
                 continue
+            pending_quit = False  # any prompt activity disarms the quit
             text = line.strip()
             if not text:
                 continue
