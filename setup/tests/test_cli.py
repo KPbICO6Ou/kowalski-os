@@ -235,3 +235,41 @@ def test_ask_http_service_keep_anyway_after_failed_check(mock_tts, monkeypatch):
 def test_ask_voice_blank_keeps_current(monkeypatch):
     monkeypatch.setattr(builtins, "input", _inputs([""]))
     assert cli.ask_voice({"KOW_WAKE_MODE": "both"}) == {}  # no updates -> config preserved
+
+
+def test_offer_wake_training_runs_on_yes():
+    calls = []
+    cli.maybe_offer_wake_training(
+        {"voice": {"wake_mode": "both", "wake_word": "kowalski"}},
+        prompt=lambda *_: "y",
+        runner=calls.append,
+    )
+    assert calls == ["kowalski"]
+
+
+def test_offer_wake_training_skipped_on_no():
+    calls = []
+    cli.maybe_offer_wake_training(
+        {"voice": {"wake_mode": "wake_word", "wake_word": "kowalski"}},
+        prompt=lambda *_: "n",
+        runner=calls.append,
+    )
+    assert calls == []
+
+
+def test_offer_wake_training_skipped_when_model_already_set():
+    calls = []
+    cli.maybe_offer_wake_training(
+        {"voice": {"wake_mode": "both", "wake_model": "/m/k.onnx"}},
+        prompt=lambda *_: "y",
+        runner=calls.append,
+    )
+    assert calls == []
+
+
+def test_offer_wake_training_skipped_for_push_to_talk():
+    calls = []
+    cli.maybe_offer_wake_training(
+        {"voice": {"wake_mode": "push_to_talk"}}, prompt=lambda *_: "y", runner=calls.append
+    )
+    assert calls == []

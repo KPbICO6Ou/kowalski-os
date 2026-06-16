@@ -74,10 +74,25 @@ design in this mode.
 | `both` | Enter **or** the wake word, whichever comes first |
 
 openWakeWord ships/downloads pretrained names (`hey_jarvis`, `alexa`, …). A
-custom phrase such as **"kowalski" needs a trained model file** — train one with
-the openWakeWord notebook and point `KOW_WAKE_MODEL` at its `.onnx`/`.tflite`.
-Until then, use `both` so push-to-talk always works while you dial in the model.
-The RMS energy VAD endpoints utterances; silero-vad is the production upgrade.
+custom phrase such as **"kowalski" needs a trained model file**. Until then, use
+`both` so push-to-talk always works while you dial in the model. The RMS energy
+VAD endpoints utterances; silero-vad is the production upgrade.
+
+### Training / registering a wake word
+
+```sh
+kow-voice train hey_jarvis                 # pretrained: just configures it
+kow-voice train kowalski --model k.onnx    # register an already-trained model
+kow-voice train kowalski                    # custom + no model: prints how to train
+```
+
+`kow-voice train` wires the result into `kowalski.conf` (`KOW_WAKE_MODEL`/
+`KOW_WAKE_WORD` + `KOW_WAKE_MODE=both`) so `kow-voice run`/`chat` pick it up;
+`kow-setup` offers to run it at the end when a custom wake word was chosen. The
+**model training itself is heavy** (PyTorch + a synthetic sample generator +
+background audio, minutes on CPU) and is verified on hardware — `kow-voice train`
+prints the exact setup steps, and once you have the `.onnx` (e.g. from the
+openWakeWord notebook), `--model` registers it.
 
 ## Configuration
 

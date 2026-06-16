@@ -52,7 +52,28 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\nconfig written: {args.config}")
     else:
         print("\nno changes (all services skipped)")
+    maybe_offer_wake_training(raw)
     return 0
+
+
+def _default_train_runner(word: str) -> None:
+    import subprocess
+
+    subprocess.run(["kow-voice", "train", word], check=False)
+
+
+def maybe_offer_wake_training(raw: dict, prompt=input, runner=None) -> None:
+    """If a wake word (not push-to-talk) was chosen and no model is set yet, offer
+    to prepare it now via `kow-voice train` (delegates to the voice package)."""
+    voice = raw.get("voice") or {}
+    if voice.get("wake_mode") not in ("wake_word", "both") or voice.get("wake_model"):
+        return
+    word = voice.get("wake_word") or "hey_kowalski"
+    answer = prompt(f"\nPrepare a wake-word model for '{word}' now? [y/N] ").strip().lower()
+    if not answer.startswith("y"):
+        print(f"  (later: kow-voice train {word})")
+        return
+    (runner or _default_train_runner)(word)
 
 
 def _run_non_interactive(raw: dict, args) -> int:

@@ -3,6 +3,9 @@
   kow-voice demo [--barge-in]   run the whole pipeline with mocks (any OS)
   kow-voice run                 real pipeline (mic + STT/TTS services + kow-core)
   kow-voice check               probe STT, TTS, and the kow-core socket
+  kow-voice test                round-trip self-test (greet → record → STT → echo)
+  kow-voice chat                voice + text chat in one conversation
+  kow-voice train <phrase>      prepare a custom wake word
 """
 
 from __future__ import annotations
@@ -10,6 +13,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from pathlib import Path
 
 from . import __version__
 from .settings import VoiceSettings
@@ -57,6 +61,11 @@ def main(argv: list[str] | None = None) -> int:
         "test", help="round-trip self-test: greet → record → STT → echo (LLM diagnosis on failure)"
     )
 
+    train = sub.add_parser("train", help="prepare a custom wake word (register a model or train)")
+    train.add_argument("phrase", help="wake phrase, e.g. kowalski or hey_jarvis")
+    train.add_argument("--model", help="path to an already-trained .onnx/.tflite model")
+    train.add_argument("--out-dir", type=Path, dest="out_dir", help="where to store the model")
+
     chat = sub.add_parser("chat", help="voice + text chat (type or talk; answers printed + spoken)")
     chat.add_argument("--model", help="override OLLAMA_MODEL")
     chat.add_argument("--yes", action="store_true", help="auto-approve confirmations")
@@ -76,6 +85,10 @@ def main(argv: list[str] | None = None) -> int:
         from .selftest import run_test
 
         return asyncio.run(run_test())
+    if args.command == "train":
+        from .train import run_train
+
+        return run_train(args.phrase, model=args.model, out_dir=args.out_dir)
     if args.command == "chat":
         from .chat import run_chat
 
