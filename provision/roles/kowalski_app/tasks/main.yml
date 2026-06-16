@@ -253,6 +253,41 @@
     XDG_RUNTIME_DIR: "/run/user/{{ kow_uid.stdout }}"
   when: kow_service | bool
 
+# -- auto-update timer (beta: pull origin into the install on a schedule) -----
+
+- name: Make the auto-update script executable
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.file:
+    path: "{{ kow_prefix }}/provision/autoupdate.sh"
+    mode: "0755"
+  when: kow_autoupdate | bool
+
+- name: Install the auto-update systemd user units
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ kow_home }}/.config/systemd/user/{{ item }}"
+    mode: "0644"
+  loop:
+    - kowalski-update.service
+    - kowalski-update.timer
+  when: kow_autoupdate | bool
+
+- name: Enable and start the auto-update timer
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.systemd_service:
+    name: kowalski-update.timer
+    scope: user
+    daemon_reload: true
+    enabled: true
+    state: started
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ kow_uid.stdout }}"
+  when: kow_autoupdate | bool
+
 # -- XFCE theme + first-login onboarding -------------------------------------
 
 - name: Create the shared theme directory

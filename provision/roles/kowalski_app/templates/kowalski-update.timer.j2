@@ -1,0 +1,10 @@
+[Unit]
+Description=Kowalski OS auto-update timer (poll origin every {{ kow_autoupdate_interval }})
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec={{ kow_autoupdate_interval }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target
