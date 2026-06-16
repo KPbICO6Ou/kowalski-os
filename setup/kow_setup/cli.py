@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 
 from . import __version__
-from .core import SERVICES, run
+from .core import SERVICES, normalize_ollama_url, run
 
 DEFAULT_CONFIG = Path("~/.config/kowalski/kowalski.conf").expanduser()
 
@@ -58,29 +58,74 @@ def ask_interactively() -> dict:
     print("(local install is not available yet)\n")
     for service in SERVICES:
         mode = input(f"{service}: [r]emote / [s]kip? ").strip().lower()
-        if mode.startswith("r"):
-            url = input(f"  {service} URL: ").strip()
-            entry: dict = {"mode": "remote", "url": url}
-            if service in ("stt", "tts"):
-                token = input("  token (optional): ").strip()
-                if token:
-                    entry["token"] = token
-            if service == "ollama":
-                model = input("  model (optional, e.g. qwen2.5:14b): ").strip()
-                if model:
-                    entry["model"] = model
-            if service == "stt":
-                language = input("  language (ru/en/auto, optional): ").strip()
-                if language:
-                    entry["language"] = language
-            raw[service] = entry
-        else:
+        if not mode.startswith("r"):
             raw[service] = {"mode": "skip"}
+            continue
+        raw[service] = ask_ollama() if service == "ollama" else ask_http_service(service)
 
     voice = ask_voice()
     if voice:
         raw["voice"] = voice
     return raw
+
+
+def ask_http_service(service: str) -> dict:
+    """Prompt for an STT/TTS remote endpoint (URL + optional token/language)."""
+    entry: dict = {"mode": "remote", "url": input(f"  {service} URL: ").strip()}
+    token = input("  token (optional): ").strip()
+    if token:
+        entry["token"] = token
+    if service == "stt":
+        language = input("  language (ru/en/auto, optional): ").strip()
+        if language:
+            entry["language"] = language
+    return entry
+
+
+def ask_ollama() -> dict:
+    """Prompt for the Ollama URL, probe it (default port 11434 when omitted),
+    then offer the server's installed models to pick from."""
+    entry: dict = {"mode": "remote"}
+    while True:
+        url = normalize_ollama_url(input("  ollama URL (host[:port], default port 11434): ").strip())
+        from .checks import check_ollama  # imported here so tests can patch it
+
+        result = check_ollama(url)
+        if result.ok:
+            models = [m for m in result.detail.get("models", []) if m]
+            print(f"  [OK] {url} — {result.latency_ms} ms, {len(models)} model(s)")
+            entry["url"] = url
+            model = _choose_model(models)
+            if model:
+                entry["model"] = model
+            return entry
+        print(f"  [unreachable] {url} — {result.error}")
+        if input("  re-enter URL? [Y/n]: ").strip().lower().startswith("n"):
+            entry["url"] = url
+            model = input("  model (type it, optional): ").strip()
+            if model:
+                entry["model"] = model
+            return entry
+
+
+def _choose_model(models: list[str]) -> str:
+    """Show the installed models and return the chosen name (blank = server
+    default). Accepts a list number or a typed name."""
+    if not models:
+        print("  (no models installed on the server)")
+        return input("  model (type it, optional): ").strip()
+    print("  available models:")
+    for index, name in enumerate(models, start=1):
+        print(f"    {index}) {name}")
+    choice = input("  choose [number or name, blank = server default]: ").strip()
+    if not choice:
+        return ""
+    if choice.isdigit():
+        position = int(choice) - 1
+        if 0 <= position < len(models):
+            return models[position]
+        print(f"  (no #{choice}; using it as a literal name)")
+    return choice
 
 
 def ask_voice() -> dict:

@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from kow_setup.checks import CheckResult
-from kow_setup.core import build_voice_updates, parse_answers, run
+from kow_setup.core import build_voice_updates, normalize_ollama_url, parse_answers, run
 
 
 def answers_remote_ollama() -> dict:
@@ -62,6 +62,33 @@ def test_all_skip_writes_nothing(tmp_path: Path):
 def test_local_mode_not_implemented(tmp_path: Path):
     with pytest.raises(NotImplementedError):
         run({"ollama": {"mode": "local"}}, tmp_path / "c.conf")
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("127.0.0.1", "http://127.0.0.1:11434"),         # bare host -> default port
+        ("127.0.0.1:12345", "http://127.0.0.1:12345"),   # explicit port kept
+        ("http://10.0.0.5", "http://10.0.0.5:11434"),    # scheme, no port
+        ("http://10.0.0.5:11434", "http://10.0.0.5:11434"),
+        ("https://ollama.local:443/", "https://ollama.local:443"),
+        ("  10.16.69.251  ", "http://10.16.69.251:11434"),  # whitespace
+    ],
+)
+def test_normalize_ollama_url(raw, expected):
+    assert normalize_ollama_url(raw) == expected
+
+
+def test_normalize_ollama_url_is_idempotent():
+    once = normalize_ollama_url("10.16.69.251")
+    assert normalize_ollama_url(once) == once
+
+
+def test_parse_answers_normalizes_ollama_url():
+    answers = parse_answers({"ollama": {"mode": "remote", "url": "127.0.0.1:12345"}})
+    assert answers["ollama"].url == "http://127.0.0.1:12345"
+    answers = parse_answers({"ollama": {"mode": "remote", "url": "10.0.0.5"}})
+    assert answers["ollama"].url == "http://10.0.0.5:11434"
 
 
 def test_build_voice_updates_maps_keys():

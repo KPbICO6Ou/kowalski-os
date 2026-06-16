@@ -7,12 +7,36 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 from .checks import CheckResult, check_ollama, check_stt, check_tts
 from .config import write_conf
 
 SERVICES = ("ollama", "stt", "tts")
 WAKE_MODES = ("push_to_talk", "wake_word", "both")
+OLLAMA_DEFAULT_PORT = 11434
+
+
+def normalize_ollama_url(url: str, default_port: int = OLLAMA_DEFAULT_PORT) -> str:
+    """Add `http://` when the scheme is missing and `:11434` when no port is
+    given. '127.0.0.1' -> 'http://127.0.0.1:11434'; an explicit port like
+    '127.0.0.1:12345' is kept as-is."""
+    url = url.strip()
+    if not url:
+        return url
+    if "://" not in url:
+        url = "http://" + url
+    parsed = urlparse(url)
+    if parsed.port is None and parsed.hostname:
+        host = parsed.hostname
+        if ":" in host:  # IPv6 literal
+            host = f"[{host}]"
+        netloc = f"{host}:{default_port}"
+        if parsed.username:
+            cred = parsed.username + (f":{parsed.password}" if parsed.password else "")
+            netloc = f"{cred}@{netloc}"
+        parsed = parsed._replace(netloc=netloc)
+    return urlunparse(parsed).rstrip("/")
 
 
 @dataclass
@@ -31,9 +55,12 @@ def parse_answers(raw: dict) -> dict[str, ServiceAnswer]:
         mode = entry.get("mode", "skip")
         if mode not in ("local", "remote", "skip"):
             raise ValueError(f"{service}: invalid mode '{mode}'")
+        url = entry.get("url", "")
+        if service == "ollama" and url:
+            url = normalize_ollama_url(url)
         answers[service] = ServiceAnswer(
             mode=mode,
-            url=entry.get("url", ""),
+            url=url,
             token=entry.get("token", ""),
             model=entry.get("model", ""),
             language=entry.get("language", ""),
