@@ -6,6 +6,7 @@ callbacks are dispatched by the server's GLib loop thread, so the test reads
 them from a thread-safe queue via asyncio.to_thread."""
 
 import asyncio
+import importlib.util
 import json
 import os
 import queue
@@ -29,10 +30,16 @@ from .fake_llm import FakeLLM
 _HAVE_SESSION_BUS = sys.platform.startswith("linux") and bool(
     os.environ.get("DBUS_SESSION_BUS_ADDRESS")
 )
+# dasbus (PyGObject) is an optional Linux-only dep; on a desktop box a session
+# bus exists but dasbus may not be installed — skip rather than error there.
+_HAVE_DASBUS = importlib.util.find_spec("dasbus") is not None
 
 pytestmark = [
     pytest.mark.linux,
-    pytest.mark.skipif(not _HAVE_SESSION_BUS, reason="needs Linux with a session D-Bus"),
+    pytest.mark.skipif(
+        not (_HAVE_SESSION_BUS and _HAVE_DASBUS),
+        reason="needs Linux with a session D-Bus and dasbus installed",
+    ),
 ]
 
 SERVICE_NAME = "org.kowalski.Core"
