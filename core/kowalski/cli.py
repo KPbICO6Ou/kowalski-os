@@ -86,7 +86,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "ask":
         return asyncio.run(cmd_ask(args))
     if args.command == "chat":
-        return asyncio.run(cmd_chat(args))
+        try:
+            return asyncio.run(cmd_chat(args))
+        except KeyboardInterrupt:
+            # asyncio.run() cancels the main task on Ctrl-C and re-raises after
+            # cmd_chat already printed its clean exit; swallow the trailing
+            # traceback so a double Ctrl-C leaves quietly.
+            return 0
     if args.command == "serve":
         from .daemon import run_daemon
 
