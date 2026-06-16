@@ -90,7 +90,7 @@
 - name: Check whether the voice mic + wake-word stack is present
   become: true
   become_user: "{{ kow_user }}"
-  ansible.builtin.command: "{{ kow_prefix }}/.venv/bin/python -c 'import sounddevice, openwakeword'"
+  ansible.builtin.command: "{{ kow_voice_venv }}/bin/python -c 'import sounddevice, openwakeword'"
   register: kow_mic_present
   changed_when: false
   failed_when: false
@@ -101,12 +101,33 @@
   become_user: "{{ kow_user }}"
   ansible.builtin.shell: |
     set -e
-    "{{ kow_prefix }}/.venv/bin/pip" install -e "{{ kow_prefix }}/voice[mic]"
-    "{{ kow_prefix }}/.venv/bin/pip" install --no-deps openwakeword
+    "{{ kow_voice_venv }}/bin/pip" install -e "{{ kow_prefix }}/voice[mic]"
+    "{{ kow_voice_venv }}/bin/pip" install --no-deps openwakeword
   args:
     executable: /bin/bash
   changed_when: true
   when: kow_voice_mic | bool and (kow_mic_present.rc | default(1)) != 0
+
+- name: Check whether the wake-word training stack (torch) is present
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.command: "{{ kow_voice_venv }}/bin/python -c 'import torch, torchaudio'"
+  register: kow_torch_present
+  changed_when: false
+  failed_when: false
+  when: kow_voice_train | bool
+
+- name: Install the wake-word training stack (torch, torchaudio) for `kow-voice train`
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.shell: |
+    set -e
+    "{{ kow_voice_venv }}/bin/pip" install --index-url "{{ kow_torch_index }}" torch torchaudio
+    "{{ kow_voice_venv }}/bin/pip" install --no-deps openwakeword
+  args:
+    executable: /bin/bash
+  changed_when: true
+  when: kow_voice_train | bool and (kow_torch_present.rc | default(1)) != 0
 
 - name: Link the CLI launchers into /usr/local/bin
   become: true
@@ -138,7 +159,24 @@
     mode: "0600"
   when: kow_manage_conf | bool
 
-- name: Set the Ansible-managed keys in kowalski.conf (merge, preserving others)
+- name: Read the existing kowalski.conf (to preserve values already set by kow-setup or the user)
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.slurp:
+    src: "{{ kow_home }}/.config/kowalski/kowalski.conf"
+  register: kow_conf_raw
+  failed_when: false
+  when: kow_manage_conf | bool
+
+- name: Collect the keys already present in kowalski.conf
+  ansible.builtin.set_fact:
+    kow_conf_keys: >-
+      {{ (kow_conf_raw.content | default('') | b64decode).splitlines() | map('trim')
+         | select('match', '^[A-Za-z0-9_]+=')
+         | map('regex_replace', '=.*$', '') | list }}
+  when: kow_manage_conf | bool
+
+- name: Seed the Ansible-managed keys in kowalski.conf (only if absent; preserves kow-setup edits)
   become: true
   become_user: "{{ kow_user }}"
   ansible.builtin.lineinfile:
@@ -155,7 +193,9 @@
     - {key: KOW_ALLOWED_PATHS, value: "{{ kow_allowed_paths }}"}
   loop_control:
     label: "{{ item.key }}"
-  when: kow_manage_conf | bool
+  when:
+    - kow_manage_conf | bool
+    - kow_force_conf | bool or item.key not in kow_conf_keys
   notify: Restart kowalski-core
 
 # -- systemd user service ----------------------------------------------------
