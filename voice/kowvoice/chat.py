@@ -129,6 +129,9 @@ async def run_chat(
             f"{DIM}Type a message, or press Enter on an empty line to talk. "
             f"'quit' or Ctrl-D to exit.{RESET}"
         )
+        hotkey = config.get("KOW_VOICE_HOTKEY", "").strip()
+        if hotkey:
+            print(f"{DIM}Push-to-talk hotkey: {hotkey}{RESET}")
     else:
         print(f"{DIM}Type a message. 'quit' or Ctrl-D to exit.{RESET}")
 
