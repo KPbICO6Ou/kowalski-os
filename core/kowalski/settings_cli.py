@@ -20,10 +20,51 @@ def _mask_value(key: str, value: str, kind: str | None) -> str:
     return "••••••••" if (secret and value) else value
 
 
+# [Other] keys (no short alias) are folded into themed one-line groups for a
+# tidy `show`; a trailing catch-all line keeps any new key from disappearing.
+OTHER_FAMILIES: tuple[tuple[str, ...], ...] = (
+    ("IMAP_",),
+    ("SMTP_", "MAIL_FROM"),
+    ("KOW_MAIL_BACKEND",),
+    ("KOW_API_", "KOW_LOG_LEVEL"),
+    ("KOW_SHELL", "KOW_UIAUTO", "KOW_VISION_MODEL"),
+    ("KOW_TOOLBOX_",),
+    ("KOW_MEMORY", "KOW_CHECKLIST"),
+    ("KOW_SUMMARIZE",),
+    ("KOW_RECIPES", "KOW_PLUGINS_DIR", "KOW_MCP_SERVERS", "KOW_PAI_MODEL"),
+    ("KOW_HEARTBEAT",),
+    ("KOW_DB_PATH", "KOW_INDEX"),
+    ("KOW_AUTO_ALLOW_NETWORK", "KOW_TOOL_TIMEOUT", "KOW_CONFIRM_TIMEOUT", "KOW_SOCKET_PATH"),
+)
+
+
+def _other_lines(cfg) -> list[str]:
+    """Group the non-schema keys into themed ' · '-joined lines."""
+    others = [k for k in sorted(cfg.values) if k not in BY_KEY]
+    used: set[str] = set()
+    lines: list[str] = []
+
+    def render(key: str) -> str:
+        value = _mask_value(key, cfg.get(key), None)
+        return f"{key}={value}" if value else key
+
+    for family in OTHER_FAMILIES:
+        members = [k for k in others
+                   if k not in used and any(k == p or k.startswith(p) for p in family)]
+        if members:
+            used.update(members)
+            lines.append(" · ".join(render(k) for k in members))
+    leftover = [k for k in others if k not in used]
+    if leftover:
+        lines.append(" · ".join(render(k) for k in leftover))
+    return lines
+
+
 def cmd_setup_show(args) -> int:
-    """Print every setting: the curated short-key groups, then any other keys."""
+    """Pretty dump of every setting: key · value · env variable, by section."""
     cfg = Config.load()
     width = max(len(s.short) for s in SETTINGS)
+    print(f"  {'key':<{width}}  {'value':<30}  env variable")
     last_group = None
     for s in SETTINGS:
         if s.group != last_group:
@@ -33,11 +74,11 @@ def cmd_setup_show(args) -> int:
         shown = _mask_value(s.key, value, s.kind) or "—"
         print(f"  {s.short:<{width}}  {shown:<30}  {s.key}")
 
-    others = sorted(k for k in cfg.values if k not in BY_KEY)
-    if others:
-        print("\n[Other]")
-        for key in others:
-            print(f"  {key} = {_mask_value(key, cfg.get(key), None)}")
+    other = _other_lines(cfg)
+    if other:
+        print("\n[Other]  (set by full env KEY)")
+        for line in other:
+            print(f"  {line}")
     return 0
 
 
