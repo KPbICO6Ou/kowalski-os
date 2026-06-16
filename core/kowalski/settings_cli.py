@@ -45,7 +45,7 @@ def cmd_setup_get(args) -> int:
     """Print one value (raw, unmasked — meant for scripting) by short or full key."""
     cfg = Config.load()
     setting = resolve(args.name)
-    key = setting.key if setting else args.name
+    key = setting.key if setting else args.name.upper()
     if key not in cfg.values and key not in DEFAULTS:
         print(f"unknown setting: {args.name}", file=sys.stderr)
         return 2
@@ -64,10 +64,10 @@ def cmd_setup_set(args) -> int:
             return 2
         key = setting.key
     else:
-        key = args.name
-        if key != key.upper() or not all(c.isalnum() or c == "_" for c in key):
+        key = args.name.upper()
+        if not key or not all(c.isalnum() or c == "_" for c in key):
             print(f"unknown setting: {args.name}\n"
-                  "use a short key (see `kow setup show`) or a full UPPER_CASE KEY",
+                  "use a key from `kow setup show` (any case) or a full env KEY",
                   file=sys.stderr)
             return 2
         value = args.value
@@ -101,7 +101,8 @@ def _put(stdscr, y: int, x: int, text: str, attr: int = 0) -> None:
         pass
 
 
-VALUE_COL = 16
+SHORT_W = max(len(s.short) for s in SETTINGS)
+VALUE_COL = 4 + SHORT_W + 2
 
 
 def _edit_text(stdscr, y: int, initial: str, masked: bool) -> str | None:
@@ -148,7 +149,7 @@ def _tui_loop(stdscr, work: dict, original: dict, path) -> None:
                 row += 1
                 last_group = s.group
             attr = curses.A_REVERSE if i == sel else 0
-            _put(stdscr, row, 4, f"{s.short:<11}", attr)
+            _put(stdscr, row, 4, f"{s.short:<{SHORT_W}}", attr)
             _put(stdscr, row, VALUE_COL, _display(s, work[s.key]), attr)
             rows[i] = row
             row += 1
