@@ -125,14 +125,38 @@
     state: directory
     mode: "0700"
 
-- name: Write kowalski.conf
+- name: Create kowalski.conf with a header if it does not exist
   become: true
   become_user: "{{ kow_user }}"
-  ansible.builtin.template:
-    src: kowalski.conf.j2
+  ansible.builtin.copy:
     dest: "{{ kow_home }}/.config/kowalski/kowalski.conf"
+    content: |
+      # Kowalski OS configuration.
+      # Ansible manages OLLAMA_*/embed/vision/paths; kow-setup manages STT/TTS/wake.
+      # Both merge in place — keys they don't own are preserved.
+    force: false  # never clobber an existing conf (kow-setup also writes here)
     mode: "0600"
   when: kow_manage_conf | bool
+
+- name: Set the Ansible-managed keys in kowalski.conf (merge, preserving others)
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.lineinfile:
+    path: "{{ kow_home }}/.config/kowalski/kowalski.conf"
+    regexp: "^{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+    create: true
+    mode: "0600"
+  loop:
+    - {key: OLLAMA_HOST, value: "{{ kow_ollama_host }}"}
+    - {key: OLLAMA_MODEL, value: "{{ kow_ollama_model }}"}
+    - {key: KOW_EMBED_MODEL, value: "{{ kow_embed_model }}"}
+    - {key: KOW_VISION, value: "{{ kow_vision }}"}
+    - {key: KOW_ALLOWED_PATHS, value: "{{ kow_allowed_paths }}"}
+  loop_control:
+    label: "{{ item.key }}"
+  when: kow_manage_conf | bool
+  notify: Restart kowalski-core
 
 # -- systemd user service ----------------------------------------------------
 
