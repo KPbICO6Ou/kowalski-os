@@ -19,7 +19,7 @@ class Setting:
     short: str                       # short, typeable key, e.g. "host"
     key: str                         # full conf KEY, e.g. "OLLAMA_HOST"
     group: str                       # display group
-    kind: str                        # "text" | "secret" | "bool" | "enum"
+    kind: str                        # text | secret | bool | enum | model | hotkey
     help: str
     choices: tuple[str, ...] = ()    # for kind == "enum"
 
@@ -28,8 +28,8 @@ GROUPS = ("Ollama", "STT", "TTS", "Voice", "Agent")
 
 SETTINGS: tuple[Setting, ...] = (
     Setting("ollama_host", "OLLAMA_HOST", "Ollama", "text", "Ollama server URL"),
-    Setting("ollama_model", "OLLAMA_MODEL", "Ollama", "text", "Chat model name"),
-    Setting("kow_embed_model", "KOW_EMBED_MODEL", "Ollama", "text", "Embedding model (semantic index)"),
+    Setting("ollama_model", "OLLAMA_MODEL", "Ollama", "model", "Chat model name"),
+    Setting("kow_embed_model", "KOW_EMBED_MODEL", "Ollama", "model", "Embedding model (semantic index)"),
     Setting("kow_vision", "KOW_VISION", "Ollama", "bool", "Screen vision tools (capture/describe)"),
     Setting("kow_temperature", "KOW_TEMPERATURE", "Ollama", "text", "Sampling temperature"),
     Setting("stt_url", "STT_URL", "STT", "text", "Speech-to-text endpoint URL"),
@@ -43,6 +43,8 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("kow_wake_model", "KOW_WAKE_MODEL", "Voice", "text", "Path to a custom wake .onnx"),
     Setting("kow_barge_in", "KOW_BARGE_IN", "Voice", "bool", "Allow interrupting the agent (barge-in)"),
     Setting("kow_chat_voice", "KOW_CHAT_VOICE", "Voice", "bool", "`kow chat` starts in voice mode"),
+    Setting("kow_voice_hotkey", "KOW_VOICE_HOTKEY", "Voice", "hotkey",
+            "Push-to-talk key — in the TUI press Enter to capture, Esc to cancel"),
     Setting("kow_allowed_paths", "KOW_ALLOWED_PATHS", "Agent", "text", "Allowed filesystem roots (':'-separated)"),
     Setting("kow_llm", "KOW_LLM", "Agent", "enum", "LLM transport", ("ollama", "pydantic-ai")),
     Setting("kow_max_iterations", "KOW_MAX_ITERATIONS", "Agent", "text", "Max agent tool iterations"),
