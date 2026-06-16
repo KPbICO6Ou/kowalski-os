@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -105,6 +106,36 @@ def parse_conf(text: str) -> dict[str, str]:
             value = value[1:-1]
         values[key.strip()] = value
     return values
+
+
+def write_conf(updates: dict[str, str], path: Path | None = None) -> Path:
+    """Merge updates into the conf file atomically; unknown existing keys survive.
+
+    Same on-disk shape kow-setup writes (sorted KEY=VALUE under a header), so the
+    wizard, `kow setup set`, and the settings TUI all agree on the format.
+    """
+    conf_path = path or DEFAULT_CONFIG_PATH
+    merged: dict[str, str] = {}
+    if conf_path.exists():
+        merged = parse_conf(conf_path.read_text())
+    merged.update({k: v for k, v in updates.items() if v is not None})
+    conf_path.parent.mkdir(parents=True, exist_ok=True)
+
+    lines = [f"{key}={value}" for key, value in sorted(merged.items())]
+    content = "# Kowalski OS configuration (managed by kow-setup)\n" + "\n".join(lines) + "\n"
+    fd, tmp_name = tempfile.mkstemp(dir=str(conf_path.parent), prefix=".kowalski-conf-")
+    try:
+        with os.fdopen(fd, "w") as handle:
+            handle.write(content)
+        os.replace(tmp_name, conf_path)
+    except BaseException:
+        os.unlink(tmp_name)
+        raise
+    try:
+        conf_path.chmod(0o600)
+    except OSError:
+        pass
+    return conf_path
 
 
 @dataclass
