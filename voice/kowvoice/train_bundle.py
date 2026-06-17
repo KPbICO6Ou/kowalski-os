@@ -117,7 +117,19 @@ def render_train_sh(spec: dict) -> str:
         '"ERROR: a model dep did not import. See README.md (Python note); '
         'rebuilding .venv on Python 3.11 (rm -rf .venv && python3.11 -m venv '
         '.venv) is the usual fix."; exit 1; }\n'
-        f'cp "$HERE/{slug}.yaml" "configs/{slug}.yaml"\n'
+        "# Build the training config by overriding the trainer's reference config\n"
+        "# (configs/hey_echo.yaml) with our wake-word settings, so every infra key\n"
+        "# the pipeline needs (paths, feature files, batch sizes) is inherited and\n"
+        "# resolve-config never KeyErrors on a schema field we didn't ship.\n"
+        f'python - "$HERE/{slug}.yaml" <<\'PYCFG\'\n'
+        "import sys, yaml\n"
+        'base = yaml.safe_load(open("configs/hey_echo.yaml"))\n'
+        "ours = yaml.safe_load(open(sys.argv[1])) or {}\n"
+        "base.update(ours)\n"
+        f'with open("configs/{slug}.yaml", "w") as f:\n'
+        "    yaml.safe_dump(base, f, sort_keys=False, allow_unicode=True)\n"
+        'print("  config: wake-word settings merged onto the trainer reference config")\n'
+        "PYCFG\n"
         "# The piper v2.0.0 voice asset is the complete ~204 MB file, but the\n"
         "# trainer's verify-data wrongly expects >=600 MB; relax that one threshold.\n"
         "sed -i 's/en_US-libritts_r-medium.pt\": 600_000_000/"
