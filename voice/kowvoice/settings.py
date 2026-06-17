@@ -36,7 +36,8 @@ DEFAULTS = {
     "KOW_VOICE_SAMPLE_RATE": "16000",
     "KOW_VAD_SILENCE_MS": "700",
     "KOW_BARGE_IN": "1",
-    "KOW_VOICE_INPUT_DEVICE": "",  # input device name (substring); empty = system default
+    "KOW_VOICE_INPUT_DEVICE": "",   # input device name (substring); empty = system default
+    "KOW_VOICE_OUTPUT_DEVICE": "",  # TTS output device name (substring); empty = system default
 }
 
 
@@ -83,6 +84,7 @@ class VoiceSettings:
     barge_in: bool
     socket_path: Path
     input_device: str = ""
+    output_device: str = ""
 
     @classmethod
     def load(cls) -> "VoiceSettings":
@@ -120,4 +122,5 @@ class VoiceSettings:
             barge_in=values["KOW_BARGE_IN"].lower() in ("1", "true", "yes"),
             socket_path=socket_path,
             input_device=values["KOW_VOICE_INPUT_DEVICE"],
+            output_device=values["KOW_VOICE_OUTPUT_DEVICE"],
         )

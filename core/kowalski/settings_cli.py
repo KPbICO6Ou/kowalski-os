@@ -321,13 +321,14 @@ def _tui_loop(stdscr, work: dict, original: dict, path) -> None:
             if combo is not None:
                 work[cur.key] = combo
                 saved = False
-        elif cur.kind == "mic" and ch in (ord(" "), curses.KEY_ENTER, 10, 13):
+        elif cur.kind in ("mic", "speaker") and ch in (ord(" "), curses.KEY_ENTER, 10, 13):
+            module = "mic_select" if cur.kind == "mic" else "speaker_select"
             try:
-                from kowvoice import mic_select
+                dialog = __import__(f"kowvoice.{module}", fromlist=["run"])
             except Exception:
-                mic_select = None
-            if mic_select is not None:
-                mic_select.run(stdscr)  # writes KOW_VOICE_INPUT_DEVICE itself
+                dialog = None
+            if dialog is not None:
+                dialog.run(stdscr)  # writes the device key itself
                 stdscr.timeout(-1)
                 curses.curs_set(0)
                 fresh = parse_conf(path.read_text()) if path.exists() else {}

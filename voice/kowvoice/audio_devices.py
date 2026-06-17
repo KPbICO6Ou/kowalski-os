@@ -188,10 +188,11 @@ class EnergyVadRecorder:
 
 
 class SoundDeviceSink:
-    """Play a WAV/PCM AudioClip on the default output device; stop() interrupts."""
+    """Play a WAV/PCM AudioClip on the chosen output device; stop() interrupts."""
 
-    def __init__(self) -> None:
+    def __init__(self, device: str = "") -> None:
         self._playing = False
+        self.device = device or None  # None = system default output
 
     async def play(self, clip: AudioClip) -> None:  # pragma: no cover - needs audio out
         import io
@@ -209,7 +210,7 @@ class SoundDeviceSink:
             frames = clip.audio
         samples = np.frombuffer(frames, dtype=np.int16)
         self._playing = True
-        sd.play(samples, sample_rate)
+        sd.play(samples, sample_rate, device=self.device)
         loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(None, sd.wait)

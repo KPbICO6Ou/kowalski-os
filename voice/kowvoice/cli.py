@@ -4,6 +4,7 @@
   kow-voice run                 real pipeline (mic + STT/TTS services + kow-core)
   kow-voice once                one push-to-talk turn (for a global hotkey)
   kow-voice mic                 pick the input microphone (level meter + echo)
+  kow-voice speaker             pick the TTS output device (with a test tone)
   kow-voice check               probe STT, TTS, and the kow-core socket
   kow-voice test                round-trip self-test (greet → record → STT → echo)
   kow-voice chat                voice + text chat in one conversation
@@ -64,6 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     once.add_argument("--no-speak", dest="speak", action="store_false", help="text only (no TTS)")
 
     sub.add_parser("mic", help="pick the input microphone (live level meter + echo test)")
+    sub.add_parser("speaker", help="pick the TTS output device (with a test tone)")
     sub.add_parser("check", help="probe STT/TTS/kow-core connectivity")
     sub.add_parser(
         "test", help="round-trip self-test: greet → record → STT → echo (LLM diagnosis on failure)"
@@ -102,6 +104,10 @@ def main(argv: list[str] | None = None) -> int:
         from .mic_select import run as run_mic
 
         return run_mic()
+    if args.command == "speaker":
+        from .speaker_select import run as run_spk
+
+        return run_spk()
     if args.command == "check":
         return asyncio.run(cmd_check())
     if args.command == "test":
@@ -195,7 +201,7 @@ def _build_real_pipeline(settings: VoiceSettings):
         stt=HttpSttClient(settings.stt_url, settings.stt_token),
         agent=SocketAgentSession(settings.socket_path),
         tts=HttpTtsClient(settings.tts_url, settings.tts_token, settings.tts_engine),
-        sink=SoundDeviceSink(),
+        sink=SoundDeviceSink(device=settings.output_device),
         interrupter=MockInterrupter(),
         settings=VoiceSettings(**{**settings.__dict__, "barge_in": False}),
         on_event=_print_event,
