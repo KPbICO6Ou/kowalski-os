@@ -114,10 +114,15 @@ def render_train_sh(spec: dict) -> str:
         '(rm -rf .venv && python3.11 -m venv .venv) and re-run."; exit 1; }\n'
         f'cp "$HERE/{slug}.yaml" "configs/{slug}.yaml"\n'
         f"python train_wakeword.py --config configs/{slug}.yaml\n"
+        "# Pack the model (graph + its .onnx.data weights) into ONE archive so only\n"
+        "# a single file travels back; kow-voice train --model unpacks it.\n"
+        f'MODEL_FILES="{slug}.onnx"\n'
+        f'[ -f "export/{slug}.onnx.data" ] && MODEL_FILES="$MODEL_FILES {slug}.onnx.data"\n'
+        f'tar czf "$HERE/{slug}-model.tar.gz" -C export $MODEL_FILES\n'
         'echo\n'
-        f'echo "Trained: $PWD/export/{slug}.onnx (+ {slug}.onnx.data)"\n'
-        f'echo "Copy BOTH files back, then on the Kowalski box run:"\n'
-        f'echo "  kow-voice train {spec["phrase"]} --model {slug}.onnx"\n'
+        f'echo "Trained + packed: $HERE/{slug}-model.tar.gz"\n'
+        f'echo "Carry that ONE file back, then on the Kowalski box run:"\n'
+        f'echo "  kow-voice train {spec["phrase"]} --model {slug}-model.tar.gz"\n'
     )
 
 
@@ -148,8 +153,8 @@ def render_readme(spec: dict) -> str:
         " [this CPU box]            [GPU box, CUDA]              [this CPU box]\n"
         " kow-voice train \\         ./train.sh                  kow-voice train \\\n"
         f"   {spec['phrase']} --prepare   ->  (clone trainer, install,   ->    {spec['phrase']} \\\n"
-        f"   = THIS bundle              generate + train)            --model {slug}.onnx\n"
-        f"                            -> export/{slug}.onnx(.data)   = wired into kowalski.conf\n"
+        f"   = THIS bundle              generate, train, pack)      --model {slug}-model.tar.gz\n"
+        f"                            -> {slug}-model.tar.gz        = wired into kowalski.conf\n"
         "```\n\n"
         "## Stage 2 — on the GPU box\n\n"
         "Copy this whole folder over, then:\n\n"
@@ -163,16 +168,18 @@ def render_readme(spec: dict) -> str:
         "3.12 `train.sh` swaps the trainer's pin to `piper-phonemize-fix` (a cp312\n"
         "repackage of the same `piper_phonemize` module) and verifies it imports. If\n"
         "that import still fails, rebuild the venv on Python 3.11 and re-run.\n\n"
-        f"Output: `export/{slug}.onnx` (~14 KB graph) **and** `export/{slug}.onnx.data`\n"
-        "(~200 KB weights). **Keep both together** — the model is split across them.\n\n"
+        f"Output: `train.sh` trains `export/{slug}.onnx` (~14 KB graph) + "
+        f"`export/{slug}.onnx.data`\n(~200 KB weights) and packs **both** into a single "
+        f"`{slug}-model.tar.gz` in this\nfolder — that one archive is all you carry back.\n\n"
         "Fallback runner (upstream, currently fragile — see openWakeWord issue #296):\n"
         "`python openwakeword/train.py --training_config <yaml> --generate_clips "
         "--augment_clips --train_model --convert_to_tflite`.\n\n"
         "## Stage 3 — back on the Kowalski box\n\n"
-        f"Copy `{slug}.onnx` **and** `{slug}.onnx.data` into the same folder, then:\n\n"
+        f"Copy the single `{slug}-model.tar.gz` over, then:\n\n"
         "```sh\n"
-        f"kow-voice train {spec['phrase']} --model {slug}.onnx\n"
+        f"kow-voice train {spec['phrase']} --model {slug}-model.tar.gz\n"
         "```\n\n"
+        f"(A bare `{slug}.onnx` + `{slug}.onnx.data` pair still works too.) "
         f"That copies the model into `~/.config/kowalski/wake/` and sets "
         "`KOW_WAKE_MODEL` + `KOW_WAKE_MODE=both`, so `kow-voice run` / `kow chat "
         "--voice` answer to the spoken phrase. `spec.json` records the exact "

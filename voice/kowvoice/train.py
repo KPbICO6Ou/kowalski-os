@@ -54,10 +54,10 @@ def train_instructions(phrase: str) -> str:
         "  2. on a CUDA GPU box (Linux/WSL2 + NVIDIA, Python >=3.10, git):\n"
         f"       tar xzf {slug}-wakeword-train.tar.gz\n"
         f"       cd {slug}-wakeword-train && ./train.sh\n"
-        f"     -> export/{slug}.onnx + {slug}.onnx.data  (carry BOTH files back)\n"
+        f"     -> {slug}-model.tar.gz  (one archive, carry it back)\n"
         "\n"
         "  3. back here — register the trained model:\n"
-        f"       kow-voice train {phrase} --model {slug}.onnx\n"
+        f"       kow-voice train {phrase} --model {slug}-model.tar.gz\n"
         f"     -> copied into ~/.config/kowalski/wake/, KOW_WAKE_MODE=both"
     )
 
@@ -78,6 +78,32 @@ def _merge_conf(updates: dict[str, str], config_path: Path | None = None) -> Pat
     except OSError:
         pass
     return path
+
+
+def resolve_model_source(src: Path):
+    """Locate the wake model to register from a --model path. Accepts either a
+    bare .onnx/.tflite file or a .tar.gz/.tgz bundle that packs the model (+ its
+    .onnx.data sidecar) — train.sh now emits one archive instead of two files.
+
+    Returns (model_path, sidecar_path_or_None, tempdir_or_None); the caller must
+    rmtree tempdir when set. (None, None, tempdir) if no model is inside."""
+    import tarfile
+
+    if not tarfile.is_tarfile(src):  # a plain .onnx/.tflite path
+        sidecar = Path(str(src) + ".data")
+        return src, (sidecar if sidecar.exists() else None), None
+
+    import tempfile
+
+    tmp = Path(tempfile.mkdtemp(prefix="kow-wake-"))
+    with tarfile.open(src) as tar:
+        tar.extractall(tmp, filter="data")  # filter guards against path traversal
+    onnx = next(iter(sorted(tmp.rglob("*.onnx"))), None)
+    if onnx is None:
+        onnx = next(iter(sorted(tmp.rglob("*.tflite"))), None)
+        return onnx, None, tmp
+    sidecar = Path(str(onnx) + ".data")
+    return onnx, (sidecar if sidecar.exists() else None), tmp
 
 
 def run_train(
@@ -106,8 +132,8 @@ def run_train(
         on_text(
             f"prepared wake-word training bundle: {path}\n"
             "Carry it to a CUDA GPU box and run ./train.sh (see README.md inside), "
-            f"then bring the model back and run:\n"
-            f"  kow-voice train {phrase} --model {slugify(phrase)}.onnx"
+            f"then bring the one model archive back and run:\n"
+            f"  kow-voice train {phrase} --model {slugify(phrase)}-model.tar.gz"
         )
         return 0
 
@@ -122,15 +148,26 @@ def run_train(
         if not src.exists():
             on_text(f"model file not found: {src}")
             return 2
-        dest = model_path_for(phrase, out_dir)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        if src.resolve() != dest.resolve():
-            shutil.copyfile(src, dest)
-            # openWakeWord exports split the graph (.onnx) from its weights
-            # (.onnx.data); carry the sidecar across or the model won't load.
-            sidecar = Path(str(src) + ".data")
-            if sidecar.exists():
-                shutil.copyfile(sidecar, Path(str(dest) + ".data"))
+        onnx, sidecar, tmp = resolve_model_source(src)
+        if onnx is None:
+            if tmp:
+                shutil.rmtree(tmp, ignore_errors=True)
+            on_text(f"no .onnx/.tflite model found inside {src.name}")
+            return 2
+        try:
+            dest = model_path_for(phrase, out_dir)
+            if onnx.suffix == ".tflite":
+                dest = dest.with_suffix(".tflite")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if onnx.resolve() != dest.resolve():
+                shutil.copyfile(onnx, dest)
+                # openWakeWord exports split the graph (.onnx) from its weights
+                # (.onnx.data); carry the sidecar across or the model won't load.
+                if sidecar:
+                    shutil.copyfile(sidecar, Path(str(dest) + ".data"))
+        finally:
+            if tmp:
+                shutil.rmtree(tmp, ignore_errors=True)
         _merge_conf({"KOW_WAKE_MODEL": str(dest)}, config_path)
         on_text(f"registered wake model: {dest}\n"
                 "(KOW_WAKE_MODEL set, wake mode = both) — try: kow-voice run")
@@ -146,7 +183,9 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(prog="kow-voice train", description="prepare a wake word")
     parser.add_argument("phrase", help="wake phrase, e.g. kowalski or hey_jarvis")
-    parser.add_argument("--model", help="path to an already-trained .onnx/.tflite model")
+    parser.add_argument("--model",
+                        help="trained model to register: a .onnx/.tflite file or the "
+                             "<slug>-model.tar.gz that train.sh emits")
     parser.add_argument("--out-dir", type=Path, help="where to store the model / bundle")
     parser.add_argument("--prepare", action="store_true",
                         help="build a portable training bundle for a GPU box (no training here)")
