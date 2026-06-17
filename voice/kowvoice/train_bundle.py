@@ -100,7 +100,18 @@ def render_train_sh(spec: dict) -> str:
         '[ -d .venv ] || python3 -m venv .venv\n'
         '. .venv/bin/activate\n'
         "pip install --upgrade pip\n"
+        "# piper-phonemize ships no cp312 manylinux wheels; on Python 3.12 swap in\n"
+        "# the piper-phonemize-fix repackage (same piper_phonemize module, cp312\n"
+        "# wheels). Older Pythons keep the upstream pin, which already resolves.\n"
+        'PYVER="$(python -c \'import sys; print("%d.%d" % sys.version_info[:2])\')"\n'
+        'if [ "$PYVER" = "3.12" ]; then\n'
+        "  sed -i 's/^piper-phonemize>=.*/piper-phonemize-fix>=1.2.2/' requirements.txt\n"
+        '  echo "Python 3.12 -> using piper-phonemize-fix (cp312 wheels)"\n'
+        "fi\n"
         "pip install -r requirements.txt\n"
+        'python -c \'import piper_phonemize\' || { echo '
+        '"ERROR: piper_phonemize did not import. Rebuild .venv on Python 3.11 '
+        '(rm -rf .venv && python3.11 -m venv .venv) and re-run."; exit 1; }\n'
         f'cp "$HERE/{slug}.yaml" "configs/{slug}.yaml"\n'
         f"python train_wakeword.py --config configs/{slug}.yaml\n"
         'echo\n'
@@ -148,6 +159,10 @@ def render_readme(spec: dict) -> str:
         f"Tunables live in `{slug}.yaml` (`n_samples`, `steps`, `tts_batch_size`,\n"
         "`custom_negative_phrases`, `target_false_positives_per_hour`). Training takes\n"
         "minutes-to-hours and ~12 GB of scratch; a CUDA GPU is required.\n\n"
+        "Python note: `piper-phonemize` has no cp312 manylinux wheels, so on Python\n"
+        "3.12 `train.sh` swaps the trainer's pin to `piper-phonemize-fix` (a cp312\n"
+        "repackage of the same `piper_phonemize` module) and verifies it imports. If\n"
+        "that import still fails, rebuild the venv on Python 3.11 and re-run.\n\n"
         f"Output: `export/{slug}.onnx` (~14 KB graph) **and** `export/{slug}.onnx.data`\n"
         "(~200 KB weights). **Keep both together** — the model is split across them.\n\n"
         "Fallback runner (upstream, currently fragile — see openWakeWord issue #296):\n"
