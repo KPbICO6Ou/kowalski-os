@@ -160,7 +160,8 @@ class VoiceChatIO:
             settings.sample_rate, settings.vad_silence_ms, device=settings.input_device
         )
         self._stt = HttpSttClient(settings.stt_url, settings.stt_token)
-        self._tts = HttpTtsClient(settings.tts_url, settings.tts_token, settings.tts_engine)
+        self._tts = HttpTtsClient(settings.tts_url, settings.tts_token,
+                                  language=settings.tts_language)
         self._sink = SoundDeviceSink(device=settings.output_device)
 
     async def record_and_transcribe(self) -> str | None:

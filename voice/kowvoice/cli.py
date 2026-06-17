@@ -200,7 +200,7 @@ def _build_real_pipeline(settings: VoiceSettings):
         ),
         stt=HttpSttClient(settings.stt_url, settings.stt_token),
         agent=SocketAgentSession(settings.socket_path),
-        tts=HttpTtsClient(settings.tts_url, settings.tts_token, settings.tts_engine),
+        tts=HttpTtsClient(settings.tts_url, settings.tts_token, language=settings.tts_language),
         sink=SoundDeviceSink(device=settings.output_device),
         interrupter=MockInterrupter(),
         settings=VoiceSettings(**{**settings.__dict__, "barge_in": False}),

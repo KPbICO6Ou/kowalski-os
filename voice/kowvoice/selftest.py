@@ -60,7 +60,7 @@ def _real_components(settings):
     return (
         EnergyVadRecorder(settings.sample_rate, silence_ms, device=settings.input_device),
         HttpSttClient(settings.stt_url, settings.stt_token),
-        HttpTtsClient(settings.tts_url, settings.tts_token, settings.tts_engine),
+        HttpTtsClient(settings.tts_url, settings.tts_token, language=settings.tts_language),
         SoundDeviceSink(device=settings.output_device),
     )
 
@@ -175,20 +175,20 @@ async def run_test(
         on_text(f"{CYAN}TTS{RESET} › {text}")
         t0 = time.monotonic()
         clip = await tts.synthesize(text)
-        on_text(f"{DIM}sys ·   synthesized in {time.monotonic() - t0:.1f}s — speaking…{RESET}")
+        on_text(f"{DIM}SYS ·   synthesized in {time.monotonic() - t0:.1f}s — speaking…{RESET}")
         await sink.play(clip)
 
     try:
-        on_text(f"{DIM}sys › mic: {mic}  ·  speaker: {spk}{RESET}")
-        on_text(f"{DIM}sys › say a short phrase after the greeting — it gets echoed back{RESET}")
+        on_text(f"{DIM}SYS › mic: {mic}  ·  speaker: {spk}{RESET}")
+        on_text(f"{DIM}SYS › say a short phrase after the greeting — it gets echoed back{RESET}")
         await say(phrases["greet"])
-        on_text(f"{DIM}sys › listening… speak now (mic: {mic}){RESET}")
+        on_text(f"{DIM}SYS › listening… speak now (mic: {mic}){RESET}")
         utterance = await recorder.record_utterance()
         if utterance is None or utterance.is_empty:
             await say(phrases["nospeech"])
             return await _diagnose(settings, "no speech captured from the microphone",
                                    llm, probe_fn, on_text)
-        on_text(f"{DIM}sys › recorded — transcribing…{RESET}")
+        on_text(f"{DIM}SYS › recorded — transcribing…{RESET}")
         t0 = time.monotonic()
         transcript = await stt.transcribe(utterance, language=settings.stt_language or None)
         stt_s = time.monotonic() - t0
@@ -200,7 +200,7 @@ async def run_test(
         on_text(f"{GREEN}STT{RESET} › {text}  {DIM}({stt_s:.1f}s){RESET}")
         await say(phrases["echo"].format(text=text))
         await say(phrases["done"])
-        on_text(f"{DIM}sys ✓ voice round-trip OK{RESET}")
+        on_text(f"{DIM}SYS ✓ voice round-trip OK{RESET}")
         return 0
     except Exception as exc:
         return await _diagnose(settings, f"voice round-trip failed: {exc}",

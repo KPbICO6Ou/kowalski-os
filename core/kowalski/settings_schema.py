@@ -37,6 +37,8 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("stt_language", "STT_LANGUAGE", "STT", "text", "STT language, e.g. ru / en"),
     Setting("tts_url", "TTS_URL", "TTS", "text", "Text-to-speech endpoint URL"),
     Setting("tts_token", "TTS_TOKEN", "TTS", "secret", "TTS auth token"),
+    Setting("tts_language", "TTS_LANGUAGE", "TTS", "text",
+            "TTS voice language, e.g. ru / en (empty = follow STT language / server default)"),
     Setting("kow_wake_mode", "KOW_WAKE_MODE", "Voice", "enum", "How a voice turn starts",
             ("push_to_talk", "wake_word", "both")),
     Setting("kow_wake_word", "KOW_WAKE_WORD", "Voice", "text", "Wake phrase (openWakeWord name)"),

@@ -21,7 +21,8 @@ DEFAULTS = {
     "STT_LANGUAGE": "",  # empty -> server default
     "TTS_URL": "http://127.0.0.1:5000",
     "TTS_TOKEN": "",
-    "TTS_ENGINE": "",  # empty -> server default (ru: silerotts, en: pipertts)
+    "TTS_ENGINE": "",   # not sent — the server picks the engine
+    "TTS_LANGUAGE": "",  # per-request TTS voice language; empty -> follow STT_LANGUAGE
     # Wake activation: how a turn starts.
     #   push_to_talk -> press Enter (no model, works everywhere)
     #   wake_word    -> openWakeWord listens for KOW_WAKE_MODEL/KOW_WAKE_WORD
@@ -85,6 +86,7 @@ class VoiceSettings:
     socket_path: Path
     input_device: str = ""
     output_device: str = ""
+    tts_language: str = ""
 
     @classmethod
     def load(cls) -> "VoiceSettings":
@@ -123,4 +125,5 @@ class VoiceSettings:
             socket_path=socket_path,
             input_device=values["KOW_VOICE_INPUT_DEVICE"],
             output_device=values["KOW_VOICE_OUTPUT_DEVICE"],
+            tts_language=values["TTS_LANGUAGE"] or values["STT_LANGUAGE"],
         )
