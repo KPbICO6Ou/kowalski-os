@@ -15,6 +15,30 @@ import contextlib
 from .types import AudioClip, Utterance
 
 
+def _resolve_device(device, want_output: bool):
+    """Resolve a saved device name/substring to a sounddevice INDEX (what the mic
+    picker opens with), since opening by the full name string is unreliable. None
+    means the system default; an int is passed through. Never raises."""
+    if device is None or device == "":
+        return None
+    if isinstance(device, int):
+        return device
+    try:
+        import sounddevice as sd
+
+        devices = sd.query_devices()
+    except Exception:
+        return None
+    key = "max_output_channels" if want_output else "max_input_channels"
+    for i, d in enumerate(devices):  # exact name first
+        if d.get(key, 0) > 0 and d["name"] == device:
+            return i
+    for i, d in enumerate(devices):  # then substring
+        if d.get(key, 0) > 0 and device.lower() in d["name"].lower():
+            return i
+    return None  # not found -> system default
+
+
 class PushToTalkWake:
     """Dependency-free wake: press Enter to start a turn. Works on any box and
     is the fallback half of the `both` wake mode."""
@@ -128,17 +152,20 @@ class EnergyVadRecorder:
 
     def __init__(
         self, sample_rate: int = 16000, silence_ms: int = 700, threshold: float = 0.02,
-        device: str = "",
+        device: str = "", max_seconds: float = 15.0,
     ) -> None:
         self.sample_rate = sample_rate
         self.silence_ms = silence_ms
         self.threshold = threshold
         self.device = device or None  # None = system default input
+        self.max_seconds = max_seconds  # hard cap so a silent/wrong device can't hang
 
     async def record_utterance(self) -> Utterance | None:  # pragma: no cover - needs a mic
         import numpy as np
         import sounddevice as sd
 
+        # Resolve a saved device name to an index (opening by full name is flaky).
+        dev = _resolve_device(self.device, want_output=False)
         silence_blocks = max(1, self.silence_ms // 30)
         captured: list[bytes] = []
         trailing_silence = 0
@@ -151,17 +178,19 @@ class EnergyVadRecorder:
         block = int(capture_sr * 0.03)  # 30 ms blocks
         try:
             stream = sd.RawInputStream(samplerate=capture_sr, channels=1,
-                                       dtype="int16", blocksize=block, device=self.device)
+                                       dtype="int16", blocksize=block, device=dev)
             stream.start()
         except Exception:
-            dev = self.device if self.device is not None else sd.default.device[0]
-            capture_sr = int(sd.query_devices(dev)["default_samplerate"])
+            qd = dev if dev is not None else sd.default.device[0]
+            capture_sr = int(sd.query_devices(qd)["default_samplerate"])
             block = int(capture_sr * 0.03)
             stream = sd.RawInputStream(samplerate=capture_sr, channels=1,
-                                       dtype="int16", blocksize=block, device=self.device)
+                                       dtype="int16", blocksize=block, device=dev)
             stream.start()
+
+        max_blocks = max(1, int(self.max_seconds * capture_sr / block))
         try:
-            while True:
+            for _ in range(max_blocks):
                 data, _ = await loop.run_in_executor(None, stream.read, block)
                 pcm = bytes(data)
                 captured.append(pcm)
@@ -210,7 +239,7 @@ class SoundDeviceSink:
             frames = clip.audio
         samples = np.frombuffer(frames, dtype=np.int16)
         self._playing = True
-        sd.play(samples, sample_rate, device=self.device)
+        sd.play(samples, sample_rate, device=_resolve_device(self.device, want_output=True))
         loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(None, sd.wait)
