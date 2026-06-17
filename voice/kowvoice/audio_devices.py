@@ -127,11 +127,13 @@ class EnergyVadRecorder:
     speech. RMS-based endpointing; replace with silero-vad for production."""
 
     def __init__(
-        self, sample_rate: int = 16000, silence_ms: int = 700, threshold: float = 0.02
+        self, sample_rate: int = 16000, silence_ms: int = 700, threshold: float = 0.02,
+        device: str = "",
     ) -> None:
         self.sample_rate = sample_rate
         self.silence_ms = silence_ms
         self.threshold = threshold
+        self.device = device or None  # None = system default input
 
     async def record_utterance(self) -> Utterance | None:  # pragma: no cover - needs a mic
         import numpy as np
@@ -145,7 +147,8 @@ class EnergyVadRecorder:
 
         loop = asyncio.get_running_loop()
         stream = sd.RawInputStream(
-            samplerate=self.sample_rate, channels=1, dtype="int16", blocksize=block
+            samplerate=self.sample_rate, channels=1, dtype="int16", blocksize=block,
+            device=self.device,
         )
         stream.start()
         try:

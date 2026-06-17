@@ -45,6 +45,8 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("kow_chat_voice", "KOW_CHAT_VOICE", "Voice", "bool", "`kow chat` starts in voice mode"),
     Setting("kow_voice_hotkey", "KOW_VOICE_HOTKEY", "Voice", "hotkey",
             "Push-to-talk key — in the TUI press Enter to capture, Esc to cancel"),
+    Setting("kow_voice_input_device", "KOW_VOICE_INPUT_DEVICE", "Voice", "mic",
+            "Microphone — Enter opens a picker with a live level meter + echo test"),
     Setting("kow_allowed_paths", "KOW_ALLOWED_PATHS", "Agent", "text", "Allowed filesystem roots (':'-separated)"),
     Setting("kow_llm", "KOW_LLM", "Agent", "enum", "LLM transport", ("ollama", "pydantic-ai")),
     Setting("kow_max_iterations", "KOW_MAX_ITERATIONS", "Agent", "text", "Max agent tool iterations"),

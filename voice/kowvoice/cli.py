@@ -3,6 +3,7 @@
   kow-voice demo [--barge-in]   run the whole pipeline with mocks (any OS)
   kow-voice run                 real pipeline (mic + STT/TTS services + kow-core)
   kow-voice once                one push-to-talk turn (for a global hotkey)
+  kow-voice mic                 pick the input microphone (level meter + echo)
   kow-voice check               probe STT, TTS, and the kow-core socket
   kow-voice test                round-trip self-test (greet → record → STT → echo)
   kow-voice chat                voice + text chat in one conversation
@@ -61,6 +62,8 @@ def main(argv: list[str] | None = None) -> int:
     once = sub.add_parser("once", help="one push-to-talk turn (record → answer → speak); for a hotkey")
     once.add_argument("--model", help="override OLLAMA_MODEL")
     once.add_argument("--no-speak", dest="speak", action="store_false", help="text only (no TTS)")
+
+    sub.add_parser("mic", help="pick the input microphone (live level meter + echo test)")
     sub.add_parser("check", help="probe STT/TTS/kow-core connectivity")
     sub.add_parser(
         "test", help="round-trip self-test: greet → record → STT → echo (LLM diagnosis on failure)"
@@ -95,6 +98,10 @@ def main(argv: list[str] | None = None) -> int:
             return asyncio.run(run_once(model=args.model or "", speak=args.speak))
         except KeyboardInterrupt:
             return 0
+    if args.command == "mic":
+        from .mic_select import run as run_mic
+
+        return run_mic()
     if args.command == "check":
         return asyncio.run(cmd_check())
     if args.command == "test":
@@ -182,7 +189,9 @@ def _build_real_pipeline(settings: VoiceSettings):
 
     return VoiceOrchestrator(
         wake=build_wake(settings),
-        recorder=EnergyVadRecorder(settings.sample_rate, settings.vad_silence_ms),
+        recorder=EnergyVadRecorder(
+            settings.sample_rate, settings.vad_silence_ms, device=settings.input_device
+        ),
         stt=HttpSttClient(settings.stt_url, settings.stt_token),
         agent=SocketAgentSession(settings.socket_path),
         tts=HttpTtsClient(settings.tts_url, settings.tts_token, settings.tts_engine),

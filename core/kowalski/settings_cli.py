@@ -321,6 +321,23 @@ def _tui_loop(stdscr, work: dict, original: dict, path) -> None:
             if combo is not None:
                 work[cur.key] = combo
                 saved = False
+        elif cur.kind == "mic" and ch in (ord(" "), curses.KEY_ENTER, 10, 13):
+            try:
+                from kowvoice import mic_select
+            except Exception:
+                mic_select = None
+            if mic_select is not None:
+                mic_select.run(stdscr)  # writes KOW_VOICE_INPUT_DEVICE itself
+                stdscr.timeout(-1)
+                curses.curs_set(0)
+                fresh = parse_conf(path.read_text()) if path.exists() else {}
+                work[cur.key] = fresh.get(cur.key, work[cur.key])
+                original[cur.key] = work[cur.key]
+            else:  # voice/sounddevice absent — let them type the device name
+                typed = _edit_text(stdscr, rows[sel], work[cur.key], masked=False)
+                if typed is not None:
+                    work[cur.key] = typed
+                    saved = False
         elif cur.kind in ("text", "secret") and ch in (ord(" "), curses.KEY_ENTER, 10, 13):
             new = _edit_text(stdscr, rows[sel], work[cur.key], masked=cur.kind == "secret")
             if new is not None:

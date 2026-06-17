@@ -47,7 +47,9 @@ class VoiceChatIO:
         from .tts_http import HttpTtsClient
 
         self.settings = settings
-        self._recorder = EnergyVadRecorder(settings.sample_rate, settings.vad_silence_ms)
+        self._recorder = EnergyVadRecorder(
+            settings.sample_rate, settings.vad_silence_ms, device=settings.input_device
+        )
         self._stt = HttpSttClient(settings.stt_url, settings.stt_token)
         self._tts = HttpTtsClient(settings.tts_url, settings.tts_token, settings.tts_engine)
         self._sink = SoundDeviceSink()
