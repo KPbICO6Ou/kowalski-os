@@ -15,15 +15,12 @@ kow-setup wizard calls this at the end when a custom wake word was chosen."""
 
 from __future__ import annotations
 
-import importlib.util
 import re
 import shutil
 from pathlib import Path
 
 # openWakeWord ships/downloads these; a phrase outside the set needs training.
 PRETRAINED = {"alexa", "hey_jarvis", "hey_mycroft", "hey_rhasspy", "timer", "weather"}
-# python modules needed for training, beyond the inference [mic] stack
-TRAIN_REQUIREMENTS = ("torch", "torchaudio", "openwakeword")
 
 
 def slugify(phrase: str) -> str:
@@ -40,20 +37,28 @@ def model_path_for(phrase: str, out_dir: Path | None = None) -> Path:
     return out_dir / f"{slugify(phrase)}.onnx"
 
 
-def missing_requirements() -> list[str]:
-    return [m for m in TRAIN_REQUIREMENTS if importlib.util.find_spec(m) is None]
-
-
-def setup_instructions() -> str:
+def train_instructions(phrase: str) -> str:
+    """The inline 3-stage recipe for training a custom wake word: prepare a
+    bundle here, run it on a CUDA GPU box, register the result back here. Printed
+    verbatim so a user with no GPU sees the exact commands without opening a doc."""
+    slug = slugify(phrase)
     return (
-        "Wake-word training needs the openWakeWord training stack (heavy, "
-        "minutes on CPU):\n"
-        "  pip install -e 'voice[mic]'\n"
-        "  pip install torch torchaudio            # CPU build is fine; GPU is faster\n"
-        "  git clone https://github.com/rhasspy/piper-sample-generator  # positive samples\n"
-        "  # + openWakeWord's background/negative feature set (see its docs)\n"
-        "Then run the openWakeWord training notebook and register the result:\n"
-        "  kow-voice train <phrase> --model <model.onnx>"
+        f"No model for the wake word '{phrase}' yet — a custom phrase has no "
+        "pretrained openWakeWord model, so it must be trained on a CUDA GPU "
+        "(this box has none). Three steps, two machines:\n"
+        "\n"
+        "  1. here — build a portable training bundle (needs nothing heavy):\n"
+        f"       kow-voice train {phrase} --prepare\n"
+        f"     -> {slug}-wakeword-train.tar.gz  (config + train.sh + README)\n"
+        "\n"
+        "  2. on a CUDA GPU box (Linux/WSL2 + NVIDIA, Python >=3.10, git):\n"
+        f"       tar xzf {slug}-wakeword-train.tar.gz\n"
+        f"       cd {slug}-wakeword-train && ./train.sh\n"
+        f"     -> export/{slug}.onnx + {slug}.onnx.data  (carry BOTH files back)\n"
+        "\n"
+        "  3. back here — register the trained model:\n"
+        f"       kow-voice train {phrase} --model {slug}.onnx\n"
+        f"     -> copied into ~/.config/kowalski/wake/, KOW_WAKE_MODE=both"
     )
 
 
@@ -131,15 +136,8 @@ def run_train(
                 "(KOW_WAKE_MODEL set, wake mode = both) — try: kow-voice run")
         return 0
 
-    # custom phrase, no model yet -> training is required
-    missing = missing_requirements()
-    if missing:
-        on_text(f"no model for '{phrase}', and the training stack is missing "
-                f"({', '.join(missing)}).\n" + setup_instructions())
-    else:
-        on_text(f"no model for '{phrase}'. Training execution is verified on "
-                "hardware; run the openWakeWord notebook, then:\n"
-                f"  kow-voice train {phrase} --model <model.onnx>")
+    # custom phrase, no model yet -> training is required (on a GPU box)
+    on_text(train_instructions(phrase))
     return 2
 
 
