@@ -180,6 +180,31 @@ def render_readme(spec: dict) -> str:
     )
 
 
+def _normalize(ti: tarfile.TarInfo) -> tarfile.TarInfo:
+    """Strip every nondeterministic field from a tar entry (mtime, owner, and the
+    umask-dependent mode) so the archive is reproducible across runs and boxes."""
+    ti.mtime = 0
+    ti.uid = ti.gid = 0
+    ti.uname = ti.gname = ""
+    is_script = ti.name.rsplit("/", 1)[-1] == "train.sh"
+    ti.mode = 0o755 if (ti.isdir() or is_script) else 0o644
+    return ti
+
+
+def write_targz(tar_path: Path, bundle: Path, names: list[str]) -> None:
+    """Write a byte-for-byte reproducible .tar.gz: identical content -> identical
+    md5. gzip's header timestamp is zeroed and members are added in sorted order
+    with normalized metadata, so the checksum tracks content only."""
+    import gzip
+
+    with open(tar_path, "wb") as raw:
+        with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
+            with tarfile.open(fileobj=gz, mode="w") as tar:
+                tar.add(bundle, arcname=bundle.name, recursive=False, filter=_normalize)
+                for name in sorted(names):
+                    tar.add(bundle / name, arcname=f"{bundle.name}/{name}", filter=_normalize)
+
+
 def write_bundle(phrase: str, *, out_dir: Path | None = None, archive: bool = True,
                  **overrides) -> Path:
     """Render every artifact into a folder; optionally tar it. Returns the path."""
@@ -204,6 +229,5 @@ def write_bundle(phrase: str, *, out_dir: Path | None = None, archive: bool = Tr
     if not archive:
         return bundle
     tar_path = base / f"{slug}-wakeword-train.tar.gz"
-    with tarfile.open(tar_path, "w:gz") as tar:
-        tar.add(bundle, arcname=bundle.name)
+    write_targz(tar_path, bundle, list(files))
     return tar_path
