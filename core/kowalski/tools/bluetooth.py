@@ -194,16 +194,24 @@ async def bluetooth_connect_speaker(args: ConnectSpeakerArgs) -> ToolResult:
                               "the Bluetooth button until it blinks) and ask again.")
 
     await _run("bluetoothctl", "power", "on", timeout=8)
-    await _run("bluetoothctl", "pair", mac, timeout=15)
-    await _run("bluetoothctl", "trust", mac, timeout=8)
-    _, conn = await _run("bluetoothctl", "connect", mac, timeout=15)
+    await _run("bluetoothctl", "pair", mac, timeout=12)
+    await _run("bluetoothctl", "trust", mac, timeout=6)
+    _, conn = await _run("bluetoothctl", "connect", mac, timeout=12)
     _, info = await _run("bluetoothctl", "info", mac, timeout=6)
     if "connected: yes" not in info.lower():
         return ToolResult(ok=False, content=f"Couldn't connect to {name}. Make sure it's on, in "
                           f"range and in pairing mode. ({conn.strip()[:100]})")
     routed = await _route_to_bt(mac)
-    tail = " Sound now plays through it." if routed else \
-        " (connected — its audio output may take a second to appear.)"
+    if not routed:
+        # A single connect often doesn't bring up the A2DP transport, so the audio
+        # server never creates the sink. A fresh re-connect reliably does.
+        await _run("bluetoothctl", "disconnect", mac, timeout=6)
+        await asyncio.sleep(1.5)
+        await _run("bluetoothctl", "connect", mac, timeout=12)
+        routed = await _route_to_bt(mac)
+    tail = (" Sound now plays through it." if routed else
+            " It's paired, but the system didn't create an audio output for it — its "
+            "Bluetooth audio (A2DP) profile isn't active. Check `audio.outputs`.")
     return ToolResult(ok=True, content=f"Connected to {name}.{tail}",
                       data={"mac": mac, "name": name, "routed": routed})
 

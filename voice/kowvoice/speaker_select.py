@@ -43,20 +43,34 @@ def _save(name: str) -> None:
     write_conf({CONF_KEY: name})
 
 
-def _test_tone(stdscr, device: int) -> str:
+def _test_tone(stdscr, device: int, name: str, bar_row: int) -> str:
+    """Play a loud, distinctive 3-note chime and animate a progress bar while it
+    plays, so it's obvious the test fired and on which device."""
+    import time
+
     import numpy as np
     import sounddevice as sd
 
-    from .mic_select import _put
+    from .mic_select import BAR_WIDTH, _safe
 
     try:
         sr = int(sd.query_devices(device)["default_samplerate"]) or 44100
-        _put(stdscr, "♪ playing test tone…")
-        t = np.linspace(0, 0.6, int(sr * 0.6), endpoint=False)
-        tone = (0.2 * np.sin(2 * np.pi * 440 * t)).astype("float32")
-        sd.play(tone, sr, device=device)
+        dur = 1.2
+        t = np.linspace(0, dur, int(sr * dur), endpoint=False)
+        tone = np.zeros_like(t)
+        for k, freq in enumerate((523.25, 659.25, 783.99)):  # C5–E5–G5
+            seg = (t >= k * dur / 3) & (t < (k + 1) * dur / 3)
+            tone[seg] = np.sin(2 * np.pi * freq * t[seg])
+        sd.play((0.35 * tone).astype("float32"), sr, device=device)
+        steps = 24
+        for s in range(steps):
+            filled = int(BAR_WIDTH * (s + 1) / steps)
+            _safe(stdscr, bar_row, 2,
+                  f"▶ playing on [{device}] {name[:26]}  " + "█" * filled + "·" * (BAR_WIDTH - filled))
+            stdscr.refresh()
+            time.sleep(dur / steps)
         sd.wait()
-        return "tone played — did you hear it?"
+        return "tone done — heard it? (no sound → wrong output or nothing plugged into it)"
     except Exception as exc:  # noqa: BLE001 - surface any audio error in the dialog
         return f"test failed: {exc}"
 
@@ -109,7 +123,7 @@ def _loop(stdscr) -> int:
         elif ch in (curses.KEY_DOWN, ord("j")):
             sel = (sel + 1) % len(devices)
         elif ch in (ord("t"), ord("e")):
-            status = _test_tone(stdscr, devices[sel][0])
+            status = _test_tone(stdscr, devices[sel][0], devices[sel][1], row + 1)
         elif ch in (ord("s"), curses.KEY_ENTER, 10, 13):
             _save(devices[sel][1])
             cur = devices[sel][1]
