@@ -112,6 +112,9 @@ def render_train_sh(spec: dict) -> str:
         "# webrtcvad-wheels fork ships prebuilt wheels (same 'webrtcvad' module).\n"
         "sed -i 's/^webrtcvad>=.*/webrtcvad-wheels>=2.0.14/' requirements.txt\n"
         'echo "using webrtcvad-wheels (prebuilt; no compiler/headers needed)"\n'
+        "# acoustics (an openwakeword dep) imports scipy.special.sph_harm, removed in\n"
+        "# SciPy 1.17; pin <1.17 so the function still exists (1.16 keeps numpy-2 compat).\n"
+        "sed -i 's/^scipy$/scipy<1.17/' requirements.txt\n"
         "pip install -r requirements.txt\n"
         'python -c \'import piper_phonemize, webrtcvad\' || { echo '
         '"ERROR: a model dep did not import. See README.md (Python note); '
