@@ -93,7 +93,10 @@ def render_train_sh(spec: dict) -> str:
         "set -euo pipefail\n"
         'HERE="$(cd "$(dirname "$0")" && pwd)"\n'
         f'REPO="${{OWW_TRAINER_REPO:-{spec["trainer_repo"]}}}"\n'
-        'WORK="${1:-$HERE/work}"\n'
+        "# Args are forwarded to train_wakeword.py, so a failed step resumes with the\n"
+        "# full env set up: ./train.sh --from generate  (override work dir via WORK=...).\n"
+        'WORK="${WORK:-$HERE/work}"\n'
+        'echo "[kowalski-train] resume a failed step with:  ./train.sh --from <step>"\n'
         'mkdir -p "$WORK" && cd "$WORK"\n'
         '[ -d openwakeword-trainer ] || git clone --depth 1 "$REPO" openwakeword-trainer\n'
         "cd openwakeword-trainer\n"
@@ -171,7 +174,7 @@ def render_train_sh(spec: dict) -> str:
         "# loose script in the piper-sample-generator repo that isn't importable unless\n"
         "# its dir is on PYTHONPATH; export it so the generate subprocess inherits it.\n"
         'export PYTHONPATH="$PWD/data/piper-sample-generator${PYTHONPATH:+:$PYTHONPATH}"\n'
-        f"python train_wakeword.py --config configs/{slug}.yaml\n"
+        f'python train_wakeword.py --config configs/{slug}.yaml "$@"\n'
         "# Pack the model (graph + its .onnx.data weights) into ONE archive so only\n"
         "# a single file travels back; kow-voice train --model unpacks it.\n"
         f'MODEL_FILES="{slug}.onnx"\n'
@@ -219,6 +222,13 @@ def render_readme(spec: dict) -> str:
         "```sh\n"
         "./train.sh                 # clones openwakeword-trainer, installs, trains\n"
         "```\n\n"
+        "`train.sh` handles the venv, dependency swaps and PYTHONPATH itself — never\n"
+        "activate anything by hand. If a step fails, fix it and **resume by re-running\n"
+        "with the step it printed**, e.g. `./train.sh --from generate` (args pass\n"
+        "straight through to `train_wakeword.py`; the early cached steps are fast). To\n"
+        "pick up a newer bundle, unpack it from the PARENT dir (`cd ~ && tar xzf "
+        "kowalski-wakeword-train.tar.gz`) so `train.sh` is overwritten in place while\n"
+        "`work/` (the multi-GB downloads) is kept.\n\n"
         f"Tunables live in `{slug}.yaml` (`n_samples`, `steps`, `tts_batch_size`,\n"
         "`custom_negative_phrases`, `target_false_positives_per_hour`). Training takes\n"
         "minutes-to-hours and ~12 GB of scratch; a CUDA GPU is required.\n\n"
