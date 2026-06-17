@@ -34,6 +34,115 @@ def _fmt_hotkey(combo: str) -> str:
     return "+".join(_MOD_NAMES.get(p.lower(), p) for p in combo.split("+"))
 
 
+_TALK = object()  # sentinel: the raw reader returns this when the hotkey is pressed
+
+
+def _hotkey_bytes(combo: str) -> bytes | None:
+    """The bytes a terminal sends for an in-chat-usable hotkey, or None when the
+    combo can't be one: a plain key collides with typing, and Shift/Super on
+    printable keys aren't terminal-readable (use the global XFCE binding for those)."""
+    if not combo:
+        return None
+    parts = [p.lower() for p in combo.split("+")]
+    mods, key = parts[:-1], parts[-1]
+    if not mods or any(m in ("shift", "super", "win", "meta", "cmd") for m in mods):
+        return None
+    if "ctrl" in mods or "control" in mods:
+        if key == "space":
+            seq = b"\x00"
+        elif len(key) == 1 and key.isalpha():
+            seq = bytes([ord(key) & 0x1F])
+        else:
+            return None
+    elif len(key) == 1:
+        seq = key.encode()
+    else:
+        return None
+    return b"\x1b" + seq if "alt" in mods else seq
+
+
+def _peek_byte(fd: int, timeout: float = 0.06) -> int | None:
+    import os
+    import select
+
+    if select.select([fd], [], [], timeout)[0]:
+        b = os.read(fd, 1)
+        return b[0] if b else None
+    return None
+
+
+def _raw_read(prompt: str, hotkey: bytes | None):
+    """cbreak line reader: returns the typed line, _TALK on the hotkey; raises
+    EOFError on Ctrl-D (empty) and KeyboardInterrupt on Ctrl-C. Basic editing
+    only (printable + UTF-8 + Backspace); no history/arrows."""
+    import os
+    import sys
+    import termios
+    import tty
+
+    fd = sys.stdin.fileno()
+    sys.stdout.write(prompt)
+    sys.stdout.flush()
+    old = termios.tcgetattr(fd)
+    buf: list[str] = []
+    try:
+        tty.setcbreak(fd)  # ICANON+ECHO off, ISIG on (Ctrl-C still raises)
+        while True:
+            c = os.read(fd, 1)
+            if not c:
+                raise EOFError
+            b = c[0]
+            if b in (10, 13):  # Enter
+                sys.stdout.write("\r\n")
+                sys.stdout.flush()
+                return "".join(buf)
+            if b == 4:  # Ctrl-D
+                if not buf:
+                    raise EOFError
+                continue
+            if b in (8, 127):  # Backspace
+                if buf:
+                    buf.pop()
+                    sys.stdout.write("\b \b")
+                    sys.stdout.flush()
+                continue
+            if b == 27:  # Esc: Alt-hotkey or an escape sequence
+                nxt = _peek_byte(fd)
+                if hotkey and hotkey[:1] == b"\x1b" and nxt is not None and nxt == hotkey[1]:
+                    sys.stdout.write("\r\n")
+                    sys.stdout.flush()
+                    return _TALK
+                if nxt == 0x5B:  # '[' -> consume the arrow/seq final byte
+                    _peek_byte(fd)
+                continue
+            if hotkey and len(hotkey) == 1 and b == hotkey[0]:  # ctrl-* hotkey
+                sys.stdout.write("\r\n")
+                sys.stdout.flush()
+                return _TALK
+            if 32 <= b < 127:  # printable ASCII
+                buf.append(chr(b))
+                sys.stdout.write(chr(b))
+                sys.stdout.flush()
+            elif b >= 0xC0:  # UTF-8 lead byte (e.g. Cyrillic) -> read the rest
+                n = 2 if b < 0xE0 else 3 if b < 0xF0 else 4
+                rest = b"".join(os.read(fd, 1) for _ in range(n - 1))
+                try:
+                    ch = (bytes([b]) + rest).decode("utf-8")
+                    buf.append(ch)
+                    sys.stdout.write(ch)
+                    sys.stdout.flush()
+                except Exception:
+                    pass
+            # other control bytes ignored (Ctrl-C arrives as SIGINT via ISIG)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
+def _make_raw_reader(combo: str):
+    hotkey = _hotkey_bytes(combo)
+    return lambda prompt: _raw_read(prompt, hotkey)
+
+
 class VoiceChatIO:
     """Real mic->STT input and TTS->speaker output, built lazily from settings.
 
@@ -79,11 +188,12 @@ async def run_chat(
     conversation_id: str | None = None,
     continue_: bool = False,
     speak: bool = True,
-    input_fn=input,
+    input_fn=None,
     voice_io=None,
 ) -> int:
     """Run the unified chat loop. `speak` toggles voice I/O; `input_fn`/`voice_io`
-    are injectable for tests."""
+    are injectable for tests. With no input_fn, a tty + a usable KOW_VOICE_HOTKEY
+    switches to a raw-mode reader so the hotkey can start a turn in the input line."""
     from kowalski.agent.loop import AgentLoop
     from kowalski.bootstrap import build_default_registry, build_llm
     from kowalski.config import Config
@@ -144,6 +254,15 @@ async def run_chat(
     else:
         print(f"{DIM}Type a message. 'quit' or Ctrl-D to exit.{RESET}")
 
+    if input_fn is None:
+        import sys
+
+        hotkey = config.get("KOW_VOICE_HOTKEY", "")
+        if speak and sys.stdin.isatty() and _hotkey_bytes(hotkey) is not None:
+            input_fn = _make_raw_reader(hotkey)  # raw mode: the hotkey starts a turn
+        else:
+            input_fn = input  # cooked input() keeps readline history/editing
+
     try:
         while True:
             try:
@@ -154,9 +273,12 @@ async def run_chat(
             except (EOFError, KeyboardInterrupt):
                 print()
                 break
-            text = (line or "").strip()
-            if text in ("exit", "quit", ":q"):
-                break
+            if line is _TALK:  # raw-mode hotkey -> start a turn now
+                text = ""
+            else:
+                text = (line or "").strip()
+                if text in ("exit", "quit", ":q"):
+                    break
             if not text:
                 if not speak:
                     continue
