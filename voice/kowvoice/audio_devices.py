@@ -139,18 +139,27 @@ class EnergyVadRecorder:
         import numpy as np
         import sounddevice as sd
 
-        block = int(self.sample_rate * 0.03)  # 30 ms blocks
         silence_blocks = max(1, self.silence_ms // 30)
         captured: list[bytes] = []
         trailing_silence = 0
         heard_speech = False
-
         loop = asyncio.get_running_loop()
-        stream = sd.RawInputStream(
-            samplerate=self.sample_rate, channels=1, dtype="int16", blocksize=block,
-            device=self.device,
-        )
-        stream.start()
+
+        # Prefer 16 kHz (what STT wants); raw ALSA hw devices reject it, so fall
+        # back to the device's native rate and resample the PCM afterwards.
+        capture_sr = self.sample_rate
+        block = int(capture_sr * 0.03)  # 30 ms blocks
+        try:
+            stream = sd.RawInputStream(samplerate=capture_sr, channels=1,
+                                       dtype="int16", blocksize=block, device=self.device)
+            stream.start()
+        except Exception:
+            dev = self.device if self.device is not None else sd.default.device[0]
+            capture_sr = int(sd.query_devices(dev)["default_samplerate"])
+            block = int(capture_sr * 0.03)
+            stream = sd.RawInputStream(samplerate=capture_sr, channels=1,
+                                       dtype="int16", blocksize=block, device=self.device)
+            stream.start()
         try:
             while True:
                 data, _ = await loop.run_in_executor(None, stream.read, block)
@@ -170,7 +179,12 @@ class EnergyVadRecorder:
 
         if not heard_speech:
             return None
-        return Utterance(pcm=b"".join(captured), sample_rate=self.sample_rate)
+        samples = np.frombuffer(b"".join(captured), dtype=np.int16)
+        if capture_sr != self.sample_rate and samples.size:
+            n_out = int(samples.size * self.sample_rate / capture_sr)
+            pos = np.linspace(0, samples.size - 1, n_out)
+            samples = np.interp(pos, np.arange(samples.size), samples).astype(np.int16)
+        return Utterance(pcm=samples.tobytes(), sample_rate=self.sample_rate)
 
 
 class SoundDeviceSink:

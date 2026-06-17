@@ -55,12 +55,12 @@ def _echo_test(stdscr, device: int) -> str:
     import sounddevice as sd
 
     try:
+        sr = int(sd.query_devices(device)["default_samplerate"]) or 44100
         _put(stdscr, "● recording 2 s — speak now…")
-        rec = sd.rec(int(2 * SAMPLE_RATE), samplerate=SAMPLE_RATE, channels=1,
-                     device=device, dtype="float32")
+        rec = sd.rec(int(2 * sr), samplerate=sr, channels=1, device=device, dtype="float32")
         sd.wait()
         _put(stdscr, "▶ playing back…")
-        sd.play(rec, SAMPLE_RATE)
+        sd.play(rec, sr)
         sd.wait()
         return "echo test done"
     except Exception as exc:  # noqa: BLE001 - surface any audio error in the dialog
@@ -123,8 +123,9 @@ def _loop(stdscr) -> int:
                 level[0] = 0.0
 
         try:
-            stream["s"] = sd.InputStream(device=idx, channels=1,
-                                         samplerate=SAMPLE_RATE, callback=cb)
+            # No samplerate -> the device's native rate (raw ALSA hw devices
+            # reject a forced 16 kHz with paInvalidSampleRate).
+            stream["s"] = sd.InputStream(device=idx, channels=1, callback=cb)
             stream["s"].start()
             return ""
         except Exception as exc:  # noqa: BLE001
