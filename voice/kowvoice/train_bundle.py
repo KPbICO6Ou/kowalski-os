@@ -98,7 +98,7 @@ def render_train_sh(spec: dict) -> str:
         'WORK="${WORK:-$HERE/work}"\n'
         'echo "[kowalski-train] self-patching: piper-phonemize-fix, webrtcvad-wheels, '
         "scipy<1.17, piper-model-size, mit-rirs, config-merge, resumable-features, "
-        'generate_samples-restore, torch-weights-only"\n'
+        'generate_samples-restore, torch-weights-only, gpu-arch-cpu-fallback"\n'
         'echo "[kowalski-train] resume a failed step with:  ./train.sh --from <step>"\n'
         'mkdir -p "$WORK" && cd "$WORK"\n'
         '[ -d openwakeword-trainer ] || git clone --depth 1 "$REPO" openwakeword-trainer\n'
@@ -195,6 +195,31 @@ def render_train_sh(spec: dict) -> str:
         '"$PSG/generate_samples.py" || true\n'
         "# openWakeWord imports generate_samples from the repo root, so put it on PYTHONPATH.\n"
         'export PYTHONPATH="$PWD/$PSG${PYTHONPATH:+:$PYTHONPATH}"\n'
+        "# A GPU too old for the installed torch (e.g. Tesla P40 / Pascal sm_61) has no\n"
+        "# compiled kernels -> 'no kernel image is available'. Auto-fall back to CPU so\n"
+        "# the run still completes. Force with KOW_TRAIN_DEVICE=cpu|gpu (default auto).\n"
+        'if [ "${KOW_TRAIN_DEVICE:-auto}" = "cpu" ]; then\n'
+        '  export CUDA_VISIBLE_DEVICES=""; echo "[kowalski-train] KOW_TRAIN_DEVICE=cpu -> CPU"\n'
+        'elif [ "${KOW_TRAIN_DEVICE:-auto}" = "auto" ]; then\n'
+        "  GPU_OK=\"$(python - <<'PYC'\n"
+        "try:\n"
+        "    import torch\n"
+        "    ok = '1'\n"
+        "    if torch.cuda.is_available():\n"
+        "        c = torch.cuda.get_device_capability()\n"
+        "        ok = '1' if ('sm_%d%d' % c) in torch.cuda.get_arch_list() else '0'\n"
+        "    print(ok)\n"
+        "except Exception:\n"
+        "    print('1')\n"
+        "PYC\n"
+        ')"\n'
+        '  if [ "$GPU_OK" = "0" ]; then\n'
+        '    echo "[kowalski-train] WARNING: this GPU is too old for the installed PyTorch '
+        "(needs compute capability >= 7.5: T4 / RTX 20xx+ / A-series). Falling back to CPU "
+        '— much slower; lower n_samples in kowalski.yaml or use a newer GPU."\n'
+        '    export CUDA_VISIBLE_DEVICES=""\n'
+        "  fi\n"
+        "fi\n"
         f'python train_wakeword.py --config configs/{slug}.yaml "$@"\n'
         "# Pack the model (graph + its .onnx.data weights) into ONE archive so only\n"
         "# a single file travels back; kow-voice train --model unpacks it.\n"
