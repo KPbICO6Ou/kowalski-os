@@ -98,7 +98,7 @@ def render_train_sh(spec: dict) -> str:
         'WORK="${WORK:-$HERE/work}"\n'
         'echo "[kowalski-train] self-patching: piper-phonemize-fix, webrtcvad-wheels, '
         "scipy<1.17, piper-model-size, mit-rirs, config-merge, resumable-features, "
-        'generate_samples-path"\n'
+        'generate_samples-restore"\n'
         'echo "[kowalski-train] resume a failed step with:  ./train.sh --from <step>"\n'
         'mkdir -p "$WORK" && cd "$WORK"\n'
         '[ -d openwakeword-trainer ] || git clone --depth 1 "$REPO" openwakeword-trainer\n'
@@ -173,17 +173,22 @@ def render_train_sh(spec: dict) -> str:
         '[ -f "$ACAV.part" ] && mv -f "$ACAV.part" "$ACAV"  # reuse a trainer partial as the resume base\n'
         'dl "$HF/openwakeword_features_ACAV100M_2000_hrs_16bit.npy" data\n'
         'dl "$HF/validation_set_features.npy" data\n'
-        "# openwakeword.train does `from generate_samples import generate_samples`, a\n"
-        "# loose script in the piper-sample-generator repo (not an installed package).\n"
-        "# Make it importable two ways so it never breaks, even on a bare resume:\n"
-        "#   1) PYTHONPATH for this process tree;\n"
-        "#   2) a permanent .pth in site-packages once the repo exists (post-download).\n"
-        'export PYTHONPATH="$PWD/data/piper-sample-generator${PYTHONPATH:+:$PYTHONPATH}"\n'
-        'PSG="$PWD/data/piper-sample-generator"\n'
-        'if [ -d "$PSG" ]; then\n'
-        "  SITE=\"$(python -c 'import site; print(site.getsitepackages()[0])' 2>/dev/null || true)\"\n"
-        '  [ -n "$SITE" ] && echo "$PSG" > "$SITE/kowalski_psg.pth" || true\n'
+        "# THE generate-step fix. openWakeWord 0.6.0 does `from generate_samples import\n"
+        "# generate_samples`, but rhasspy/piper-sample-generator master moved that\n"
+        "# top-level script into a package, so the import fails outright (the file is\n"
+        "# simply absent). Pre-clone the repo (master keeps the installable layout the\n"
+        "# trainer's `pip install -e .` relies on) and restore generate_samples.py from\n"
+        "# the v2.0.0 tag — the same release as the voice model — so the import resolves.\n"
+        'PSG="data/piper-sample-generator"\n'
+        "mkdir -p data\n"
+        '[ -d "$PSG" ] || git clone --depth 1 https://github.com/rhasspy/piper-sample-generator.git "$PSG"\n'
+        'if [ ! -f "$PSG/generate_samples.py" ]; then\n'
+        '  echo "[kowalski-train] restoring generate_samples.py from piper-sample-generator@v2.0.0"\n'
+        '  GS="https://raw.githubusercontent.com/rhasspy/piper-sample-generator/v2.0.0/generate_samples.py"\n'
+        '  curl -fsSL -o "$PSG/generate_samples.py" "$GS" || wget -qO "$PSG/generate_samples.py" "$GS"\n'
         "fi\n"
+        "# openWakeWord imports generate_samples from the repo root, so put it on PYTHONPATH.\n"
+        'export PYTHONPATH="$PWD/$PSG${PYTHONPATH:+:$PYTHONPATH}"\n'
         f'python train_wakeword.py --config configs/{slug}.yaml "$@"\n'
         "# Pack the model (graph + its .onnx.data weights) into ONE archive so only\n"
         "# a single file travels back; kow-voice train --model unpacks it.\n"
