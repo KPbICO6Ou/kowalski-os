@@ -118,6 +118,24 @@ def render_train_sh(spec: dict) -> str:
         'rebuilding .venv on Python 3.11 (rm -rf .venv && python3.11 -m venv '
         '.venv) is the usual fix."; exit 1; }\n'
         f'cp "$HERE/{slug}.yaml" "configs/{slug}.yaml"\n'
+        "# The piper v2.0.0 voice asset is the complete ~204 MB file, but the\n"
+        "# trainer's verify-data wrongly expects >=600 MB; relax that one threshold.\n"
+        "sed -i 's/en_US-libritts_r-medium.pt\": 600_000_000/"
+        "en_US-libritts_r-medium.pt\": 200_000_000/' train_wakeword.py\n"
+        "# MIT RIRs load via a HF dataset script that new `datasets` rejects; pre-seed\n"
+        "# data/mit_rirs from the repo wavs so verify-data passes (best effort — RIRs\n"
+        "# are optional reverb augmentation).\n"
+        'python - <<\'PYRIR\' || echo "  RIR prefetch skipped (training proceeds without reverb aug)"\n'
+        "from huggingface_hub import snapshot_download\n"
+        "import shutil, pathlib\n"
+        'src = snapshot_download("davidscripka/MIT_environmental_impulse_responses",\n'
+        '                        repo_type="dataset", allow_patterns="16khz/*.wav")\n'
+        'dst = pathlib.Path("data/mit_rirs"); dst.mkdir(parents=True, exist_ok=True)\n'
+        "n = 0\n"
+        'for w in pathlib.Path(src, "16khz").glob("*.wav"):\n'
+        "    shutil.copy(w, dst); n += 1\n"
+        'print("  pre-seeded", n, "MIT RIR wavs")\n'
+        "PYRIR\n"
         f"python train_wakeword.py --config configs/{slug}.yaml\n"
         "# Pack the model (graph + its .onnx.data weights) into ONE archive so only\n"
         "# a single file travels back; kow-voice train --model unpacks it.\n"
@@ -175,6 +193,10 @@ def render_readme(spec: dict) -> str:
         "`webrtcvad-wheels` (otherwise webrtcvad compiles from source and needs\n"
         "`python3-dev`). It then verifies they import; if that fails, rebuild the\n"
         "venv on Python 3.11 and re-run.\n\n"
+        "Data note: `train.sh` also relaxes the trainer's over-strict piper-model\n"
+        "size check (the v2.0.0 asset is the complete ~204 MB file, not 600 MB) and\n"
+        "pre-seeds the MIT RIRs straight from HuggingFace, because their dataset\n"
+        "load script no longer works with current `datasets`.\n\n"
         f"Output: `train.sh` trains `export/{slug}.onnx` (~14 KB graph) + "
         f"`export/{slug}.onnx.data`\n(~200 KB weights) and packs **both** into a single "
         f"`{slug}-model.tar.gz` in this\nfolder — that one archive is all you carry back.\n\n"
