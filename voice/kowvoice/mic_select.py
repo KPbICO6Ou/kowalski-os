@@ -35,6 +35,31 @@ def _input_devices() -> list[tuple[int, str]]:
             if d.get("max_input_channels", 0) > 0]
 
 
+def _default_device_index(which: int) -> int | None:
+    """System default device index for input (which=0) or output (which=1)."""
+    import sounddevice as sd
+
+    try:
+        dev = sd.default.device
+        idx = dev[which]
+        return idx if isinstance(idx, int) and idx >= 0 else None
+    except Exception:
+        return None
+
+
+def _active_index(devices: list[tuple[int, str]], cur: str, default_idx: int | None) -> int:
+    """List position of the active device: the saved name, else the system default."""
+    if cur:
+        for k, (_i, n) in enumerate(devices):
+            if cur in n:
+                return k
+    if default_idx is not None:
+        for k, (i, _n) in enumerate(devices):
+            if i == default_idx:
+                return k
+    return -1
+
+
 def _current_name() -> str:
     from .settings import _kowalski_conf_path, _parse_conf
 
@@ -132,23 +157,31 @@ def _loop(stdscr) -> int:
             stream["s"] = None
             return f"cannot open device: {exc}"
 
+    default_in = _default_device_index(0)
     status = open_stream(devices[sel][0])
     try:
         while True:
             stdscr.erase()
             _safe(stdscr, 0, 2, "Select microphone", curses.A_BOLD)
-            _safe(stdscr, 1, 2, "↑/↓ choose · e echo test · Enter/s save · q quit",
+            _safe(stdscr, 1, 2,
+                  "↑/↓ choose · e echo test · Enter/s save · q quit   (● = current)",
                   curses.A_DIM)
+            active = _active_index(devices, cur, default_in)
             for k, (i, n) in enumerate(devices):
-                mark = "●" if k == sel else " "
+                dot = "●" if k == active else " "
                 attr = curses.A_REVERSE if k == sel else 0
-                _safe(stdscr, 3 + k, 2, f"{mark} [{i:>2}] {n[:58]}", attr)
+                _safe(stdscr, 3 + k, 2, f"{dot} [{i:>2}] {n[:58]}", attr)
             row = 4 + len(devices)
             filled = int(min(1.0, level[0] * 15) * BAR_WIDTH)
             _safe(stdscr, row, 2, "level  " + "█" * filled + "·" * (BAR_WIDTH - filled))
             _safe(stdscr, row + 1, 2, "speak — the bar should move", curses.A_DIM)
-            cur_mark = "current: " + (cur or "system default")
-            _safe(stdscr, row + 3, 2, cur_mark, curses.A_DIM)
+            if cur:
+                cur_name = cur
+            elif active >= 0:
+                cur_name = f"{devices[active][1]} (system default)"
+            else:
+                cur_name = "system default"
+            _safe(stdscr, row + 3, 2, "current: " + cur_name, curses.A_DIM)
             if status:
                 _safe(stdscr, row + 4, 2, status, curses.A_DIM)
             stdscr.refresh()

@@ -64,7 +64,7 @@ def _test_tone(stdscr, device: int) -> str:
 def _loop(stdscr) -> int:
     import curses
 
-    from .mic_select import _safe
+    from .mic_select import _active_index, _default_device_index, _safe
 
     curses.curs_set(0)
     stdscr.timeout(-1)
@@ -76,18 +76,27 @@ def _loop(stdscr) -> int:
         return 1
 
     cur = _current_name()
+    default_out = _default_device_index(1)
     sel = next((k for k, (_, n) in enumerate(devices) if cur and cur in n), 0)
     status = ""
     while True:
         stdscr.erase()
         _safe(stdscr, 0, 2, "Select speaker / output", curses.A_BOLD)
-        _safe(stdscr, 1, 2, "↑/↓ choose · t test tone · Enter/s save · q quit", curses.A_DIM)
+        _safe(stdscr, 1, 2, "↑/↓ choose · t test tone · Enter/s save · q quit   (● = current)",
+              curses.A_DIM)
+        active = _active_index(devices, cur, default_out)
         for k, (i, n) in enumerate(devices):
-            mark = "●" if k == sel else " "
+            dot = "●" if k == active else " "
             attr = curses.A_REVERSE if k == sel else 0
-            _safe(stdscr, 3 + k, 2, f"{mark} [{i:>2}] {n[:58]}", attr)
+            _safe(stdscr, 3 + k, 2, f"{dot} [{i:>2}] {n[:58]}", attr)
         row = 4 + len(devices)
-        _safe(stdscr, row, 2, "current: " + (cur or "system default"), curses.A_DIM)
+        if cur:
+            cur_name = cur
+        elif active >= 0:
+            cur_name = f"{devices[active][1]} (system default)"
+        else:
+            cur_name = "system default"
+        _safe(stdscr, row, 2, "current: " + cur_name, curses.A_DIM)
         if status:
             _safe(stdscr, row + 1, 2, status, curses.A_DIM)
         stdscr.refresh()
