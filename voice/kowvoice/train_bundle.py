@@ -167,6 +167,10 @@ def render_train_sh(spec: dict) -> str:
         '[ -f "$ACAV.part" ] && mv -f "$ACAV.part" "$ACAV"  # reuse a trainer partial as the resume base\n'
         'dl "$HF/openwakeword_features_ACAV100M_2000_hrs_16bit.npy" data\n'
         'dl "$HF/validation_set_features.npy" data\n'
+        "# openwakeword.train does `from generate_samples import generate_samples`, a\n"
+        "# loose script in the piper-sample-generator repo that isn't importable unless\n"
+        "# its dir is on PYTHONPATH; export it so the generate subprocess inherits it.\n"
+        'export PYTHONPATH="$PWD/data/piper-sample-generator${PYTHONPATH:+:$PYTHONPATH}"\n'
         f"python train_wakeword.py --config configs/{slug}.yaml\n"
         "# Pack the model (graph + its .onnx.data weights) into ONE archive so only\n"
         "# a single file travels back; kow-voice train --model unpacks it.\n"
