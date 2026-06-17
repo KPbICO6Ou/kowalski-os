@@ -48,6 +48,9 @@ DEFAULTS: dict[str, str] = {
     "KOW_PLUGINS_DIR": "",
     # Visible checklist tools (plan.create/update/show) for multi-step work
     "KOW_CHECKLIST": "1",
+    # bluetooth.* / audio.* tools: connect a BT speaker + route audio (needs
+    # bluetoothctl + pactl; the tool group is skipped if bluetoothctl is absent)
+    "KOW_BLUETOOTH": "1",
     # `kow chat` starts with voice (mic + TTS) on by default; needs the voice
     # package + [mic] extra. --voice/--no-voice override per invocation.
     "KOW_CHAT_VOICE": "0",

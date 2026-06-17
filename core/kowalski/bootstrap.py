@@ -91,6 +91,14 @@ def build_default_registry(
 
         registry.register_all(build_checklist_tools())
 
+    if config.get_bool("KOW_BLUETOOTH"):
+        import shutil
+
+        if shutil.which("bluetoothctl"):
+            from .tools.bluetooth import build_bluetooth_tools
+
+            registry.register_all(build_bluetooth_tools())
+
     _register_plugins(registry, config)
 
     from .tools.mcp import build_mcp_tools
