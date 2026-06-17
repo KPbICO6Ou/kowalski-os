@@ -148,6 +148,22 @@ def render_train_sh(spec: dict) -> str:
         "    shutil.copy(w, dst); n += 1\n"
         'print("  pre-seeded", n, "MIT RIR wavs")\n'
         "PYRIR\n"
+        "# The trainer streams the ~16 GB ACAV100M feature file with no resume, so a\n"
+        "# dropped connection restarts it from zero. Pre-fetch the big files with a\n"
+        "# resumable downloader (the trainer then skips any dest that already exists).\n"
+        "dl() {  # dl URL DESTDIR — resume + retry until the file is fully fetched\n"
+        "  if command -v wget >/dev/null 2>&1; then\n"
+        '    wget -c --tries=0 --timeout=60 --retry-connrefused -P "$2" "$1"\n'
+        "  else\n"
+        '    ( cd "$2" && until curl -fL -O -C - --retry 999 --retry-all-errors "$1"; do sleep 5; done )\n'
+        "  fi\n"
+        "}\n"
+        'HF="https://huggingface.co/datasets/davidscripka/openwakeword_features/resolve/main"\n'
+        "mkdir -p data\n"
+        'ACAV="data/openwakeword_features_ACAV100M_2000_hrs_16bit.npy"\n'
+        '[ -f "$ACAV.part" ] && mv -f "$ACAV.part" "$ACAV"  # reuse a trainer partial as the resume base\n'
+        'dl "$HF/openwakeword_features_ACAV100M_2000_hrs_16bit.npy" data\n'
+        'dl "$HF/validation_set_features.npy" data\n'
         f"python train_wakeword.py --config configs/{slug}.yaml\n"
         "# Pack the model (graph + its .onnx.data weights) into ONE archive so only\n"
         "# a single file travels back; kow-voice train --model unpacks it.\n"
@@ -208,7 +224,9 @@ def render_readme(spec: dict) -> str:
         "Data note: `train.sh` also relaxes the trainer's over-strict piper-model\n"
         "size check (the v2.0.0 asset is the complete ~204 MB file, not 600 MB) and\n"
         "pre-seeds the MIT RIRs straight from HuggingFace, because their dataset\n"
-        "load script no longer works with current `datasets`.\n\n"
+        "load script no longer works with current `datasets`. It also pre-fetches\n"
+        "the ~16 GB ACAV100M feature file with a resumable downloader, so a dropped\n"
+        "connection resumes instead of restarting the trainer's no-resume stream.\n\n"
         f"Output: `train.sh` trains `export/{slug}.onnx` (~14 KB graph) + "
         f"`export/{slug}.onnx.data`\n(~200 KB weights) and packs **both** into a single "
         f"`{slug}-model.tar.gz` in this\nfolder — that one archive is all you carry back.\n\n"
