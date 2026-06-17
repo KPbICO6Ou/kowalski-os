@@ -21,8 +21,9 @@ class WakeListener(Protocol):
 
 @runtime_checkable
 class Recorder(Protocol):
-    async def record_utterance(self) -> Utterance | None:
-        """Capture speech until the VAD endpoint; None on silence/timeout."""
+    async def record_utterance(self, on_level=None) -> Utterance | None:
+        """Capture speech until the VAD endpoint; None on silence/timeout.
+        on_level(rms, state) is called per audio block for a live level meter."""
 
 
 @runtime_checkable

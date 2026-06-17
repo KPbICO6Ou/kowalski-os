@@ -160,7 +160,7 @@ class EnergyVadRecorder:
         self.device = device or None  # None = system default input
         self.max_seconds = max_seconds  # hard cap so a silent/wrong device can't hang
 
-    async def record_utterance(self) -> Utterance | None:  # pragma: no cover - needs a mic
+    async def record_utterance(self, on_level=None) -> Utterance | None:  # pragma: no cover
         import numpy as np
         import sounddevice as sd
 
@@ -189,19 +189,32 @@ class EnergyVadRecorder:
             stream.start()
 
         max_blocks = max(1, int(self.max_seconds * capture_sr / block))
+        calib_blocks = 8                  # ~240 ms to measure the noise floor
+        noise: list[float] = []
+        threshold = self.threshold        # refined from the noise floor below
         try:
-            for _ in range(max_blocks):
+            for n in range(max_blocks):
                 data, _ = await loop.run_in_executor(None, stream.read, block)
                 pcm = bytes(data)
                 captured.append(pcm)
-                rms = float(np.abs(np.frombuffer(pcm, dtype=np.int16) / 32768.0).mean())
-                if rms >= self.threshold:
+                samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+                rms = float(np.sqrt(np.mean(samples * samples))) if samples.size else 0.0
+
+                if not heard_speech and n < calib_blocks:
+                    noise.append(rms)
+                    if n == calib_blocks - 1:  # adapt to the mic: floor + noise-relative
+                        threshold = max(sum(noise) / len(noise) * 3.0, 0.008)
+
+                if rms >= threshold:
                     heard_speech = True
                     trailing_silence = 0
                 elif heard_speech:
                     trailing_silence += 1
-                    if trailing_silence >= silence_blocks:
-                        break
+                state = ("ending" if trailing_silence else "speaking") if heard_speech else "waiting"
+                if on_level is not None:
+                    on_level(rms, state)
+                if heard_speech and trailing_silence >= silence_blocks:
+                    break
         finally:
             stream.stop()
             stream.close()

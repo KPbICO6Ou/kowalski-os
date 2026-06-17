@@ -56,7 +56,7 @@ def _real_components(settings):
     from .stt_http import HttpSttClient
     from .tts_http import HttpTtsClient
 
-    silence_ms = min(settings.vad_silence_ms, 400)  # snappier end-of-speech for the test
+    silence_ms = max(settings.vad_silence_ms, 1000)  # ~1 s of silence confirms you finished
     return (
         EnergyVadRecorder(settings.sample_rate, silence_ms, device=settings.input_device),
         HttpSttClient(settings.stt_url, settings.stt_token),
@@ -111,7 +111,9 @@ def _diag_prompt(settings, problem: str, checks: list[str]) -> str:
         f"wake_mode={settings.wake_mode}\n"
         "Connectivity checks:\n" + "\n".join(checks) + "\n\n"
         "Give the single most likely cause and concrete fix steps (service to start, "
-        "port, microphone/audio device, or config key). Be brief and specific."
+        "port, microphone/audio device, or config key). Be brief and specific.\n"
+        f"Write the whole answer in the user's language (language code: "
+        f"{settings.stt_language or 'en'})."
     )
 
 
@@ -169,7 +171,18 @@ async def run_test(
     mic = _device_label(settings.input_device, 0) if real_used else (settings.input_device or "mock")
     spk = _device_label(settings.output_device, 1) if real_used else (settings.output_device or "mock")
 
+    import sys
     import time
+
+    def on_level(rms: float, state: str) -> None:
+        if not sys.stdout.isatty():
+            return
+        filled = int(min(1.0, rms * 20) * 18)
+        bar = "█" * filled + "·" * (18 - filled)
+        label = {"waiting": "speak now", "speaking": "hearing you…",
+                 "ending": "finishing…"}.get(state, "")
+        sys.stdout.write(f"\r{DIM}SYS › mic [{bar}] {label}{RESET}   ")
+        sys.stdout.flush()
 
     async def say(text: str) -> None:
         on_text(f"{CYAN}TTS{RESET} › {text}")
@@ -183,7 +196,10 @@ async def run_test(
         on_text(f"{DIM}SYS › say a short phrase after the greeting — it gets echoed back{RESET}")
         await say(phrases["greet"])
         on_text(f"{DIM}SYS › listening… speak now (mic: {mic}){RESET}")
-        utterance = await recorder.record_utterance()
+        utterance = await recorder.record_utterance(on_level=on_level)
+        if sys.stdout.isatty():
+            sys.stdout.write("\r" + " " * 60 + "\r")  # clear the live meter line
+            sys.stdout.flush()
         if utterance is None or utterance.is_empty:
             await say(phrases["nospeech"])
             return await _diagnose(settings, "no speech captured from the microphone",

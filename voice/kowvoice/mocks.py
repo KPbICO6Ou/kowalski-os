@@ -31,7 +31,7 @@ class MockRecorder:
         self._queue = list(utterances)
         self.calls = 0
 
-    async def record_utterance(self) -> Utterance | None:
+    async def record_utterance(self, on_level=None) -> Utterance | None:
         self.calls += 1
         return self._queue.pop(0) if self._queue else None
 
