@@ -137,7 +137,8 @@ def _loop(stdscr) -> int:
         while True:
             stdscr.erase()
             _safe(stdscr, 0, 2, "Select microphone", curses.A_BOLD)
-            _safe(stdscr, 1, 2, "↑/↓ choose · e echo test · s save · q quit", curses.A_DIM)
+            _safe(stdscr, 1, 2, "↑/↓ choose · e echo test · Enter/s save · q quit",
+                  curses.A_DIM)
             for k, (i, n) in enumerate(devices):
                 mark = "●" if k == sel else " "
                 attr = curses.A_REVERSE if k == sel else 0
@@ -161,10 +162,10 @@ def _loop(stdscr) -> int:
             elif ch in (curses.KEY_DOWN, ord("j")):
                 sel = (sel + 1) % len(devices)
                 status = open_stream(devices[sel][0])
-            elif ch == ord("s"):
+            elif ch in (ord("s"), curses.KEY_ENTER, 10, 13):
                 _save(devices[sel][1])
                 cur = devices[sel][1]
-                status = f"saved: {devices[sel][1][:40]}"
+                status = f"✓ saved to config: {devices[sel][1][:40]}"
             elif ch == ord("e"):
                 close_stream()  # free the device for record/playback
                 status = _echo_test(stdscr, devices[sel][0])
