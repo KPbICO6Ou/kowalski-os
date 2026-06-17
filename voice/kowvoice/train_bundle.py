@@ -96,6 +96,9 @@ def render_train_sh(spec: dict) -> str:
         "# Args are forwarded to train_wakeword.py, so a failed step resumes with the\n"
         "# full env set up: ./train.sh --from generate  (override work dir via WORK=...).\n"
         'WORK="${WORK:-$HERE/work}"\n'
+        'echo "[kowalski-train] self-patching: piper-phonemize-fix, webrtcvad-wheels, '
+        "scipy<1.17, piper-model-size, mit-rirs, config-merge, resumable-features, "
+        'generate_samples-path"\n'
         'echo "[kowalski-train] resume a failed step with:  ./train.sh --from <step>"\n'
         'mkdir -p "$WORK" && cd "$WORK"\n'
         '[ -d openwakeword-trainer ] || git clone --depth 1 "$REPO" openwakeword-trainer\n'
@@ -171,9 +174,16 @@ def render_train_sh(spec: dict) -> str:
         'dl "$HF/openwakeword_features_ACAV100M_2000_hrs_16bit.npy" data\n'
         'dl "$HF/validation_set_features.npy" data\n'
         "# openwakeword.train does `from generate_samples import generate_samples`, a\n"
-        "# loose script in the piper-sample-generator repo that isn't importable unless\n"
-        "# its dir is on PYTHONPATH; export it so the generate subprocess inherits it.\n"
+        "# loose script in the piper-sample-generator repo (not an installed package).\n"
+        "# Make it importable two ways so it never breaks, even on a bare resume:\n"
+        "#   1) PYTHONPATH for this process tree;\n"
+        "#   2) a permanent .pth in site-packages once the repo exists (post-download).\n"
         'export PYTHONPATH="$PWD/data/piper-sample-generator${PYTHONPATH:+:$PYTHONPATH}"\n'
+        'PSG="$PWD/data/piper-sample-generator"\n'
+        'if [ -d "$PSG" ]; then\n'
+        "  SITE=\"$(python -c 'import site; print(site.getsitepackages()[0])' 2>/dev/null || true)\"\n"
+        '  [ -n "$SITE" ] && echo "$PSG" > "$SITE/kowalski_psg.pth" || true\n'
+        "fi\n"
         f'python train_wakeword.py --config configs/{slug}.yaml "$@"\n'
         "# Pack the model (graph + its .onnx.data weights) into ONE archive so only\n"
         "# a single file travels back; kow-voice train --model unpacks it.\n"
