@@ -98,7 +98,7 @@ def render_train_sh(spec: dict) -> str:
         'WORK="${WORK:-$HERE/work}"\n'
         'echo "[kowalski-train] self-patching: piper-phonemize-fix, webrtcvad-wheels, '
         "scipy<1.17, piper-model-size, mit-rirs, config-merge, resumable-features, "
-        'generate_samples-restore"\n'
+        'generate_samples-restore, torch-weights-only"\n'
         'echo "[kowalski-train] resume a failed step with:  ./train.sh --from <step>"\n'
         'mkdir -p "$WORK" && cd "$WORK"\n'
         '[ -d openwakeword-trainer ] || git clone --depth 1 "$REPO" openwakeword-trainer\n'
@@ -187,6 +187,12 @@ def render_train_sh(spec: dict) -> str:
         '  GS="https://raw.githubusercontent.com/rhasspy/piper-sample-generator/v2.0.0/generate_samples.py"\n'
         '  curl -fsSL -o "$PSG/generate_samples.py" "$GS" || wget -qO "$PSG/generate_samples.py" "$GS"\n'
         "fi\n"
+        "# torch >=2.6 flipped torch.load's default to weights_only=True, which rejects\n"
+        "# the full pickled Piper voice model; it's the official trusted model, so force\n"
+        "# weights_only=False in the generator (idempotent; applied even on a re-run).\n"
+        "[ -f \"$PSG/generate_samples.py\" ] && sed -i "
+        "'s/torch.load(model_path)/torch.load(model_path, weights_only=False)/' "
+        '"$PSG/generate_samples.py" || true\n'
         "# openWakeWord imports generate_samples from the repo root, so put it on PYTHONPATH.\n"
         'export PYTHONPATH="$PWD/$PSG${PYTHONPATH:+:$PYTHONPATH}"\n'
         f'python train_wakeword.py --config configs/{slug}.yaml "$@"\n'
