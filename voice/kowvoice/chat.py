@@ -34,6 +34,19 @@ def _fmt_hotkey(combo: str) -> str:
     return "+".join(_MOD_NAMES.get(p.lower(), p) for p in combo.split("+"))
 
 
+def _level_meter(rms: float, state: str) -> None:
+    """Live mic level bar on the input line while recording (tty only)."""
+    import sys
+
+    if not sys.stdout.isatty():
+        return
+    filled = int(min(1.0, rms * 20) * 16)
+    bar = "█" * filled + "·" * (16 - filled)
+    label = {"waiting": "speak…", "speaking": "hearing you…", "ending": "…"}.get(state, "")
+    sys.stdout.write(f"\r{DIM}🎤 [{bar}] {label}{RESET}\033[K")
+    sys.stdout.flush()
+
+
 _TALK = object()  # sentinel: the raw reader returns this when the hotkey is pressed
 
 
@@ -164,8 +177,8 @@ class VoiceChatIO:
                                   language=settings.tts_language)
         self._sink = SoundDeviceSink(device=settings.output_device)
 
-    async def record_and_transcribe(self) -> str | None:
-        utterance = await self._recorder.record_utterance()
+    async def record_and_transcribe(self, on_level=None) -> str | None:
+        utterance = await self._recorder.record_utterance(on_level=on_level)
         if utterance is None or utterance.is_empty:
             return None
         transcript = await self._stt.transcribe(
@@ -287,7 +300,7 @@ async def run_chat(
                 # overwrites it in place with the result (or the cancel/error).
                 print(f"{DIM}🎤 listening… (speak; silence ends it){RESET}", end="", flush=True)
                 try:
-                    text = await voice_io.record_and_transcribe()
+                    text = await voice_io.record_and_transcribe(on_level=_level_meter)
                 except (KeyboardInterrupt, asyncio.CancelledError):
                     # Ctrl-C while recording cancels just this turn (the mic stream
                     # tears down) — back to the prompt instead of crashing out.
@@ -348,7 +361,7 @@ async def run_once(*, model: str = "", speak: bool = True, voice_io=None) -> int
     try:
         print(f"{DIM}🎤 listening…{RESET}")
         try:
-            text = await voice_io.record_and_transcribe()
+            text = await voice_io.record_and_transcribe(on_level=_level_meter)
         except (KeyboardInterrupt, asyncio.CancelledError):
             print(f"{DIM}(cancelled){RESET}")
             return 0

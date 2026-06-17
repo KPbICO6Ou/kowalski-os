@@ -26,7 +26,7 @@ class FakeVoiceIO:
         self._transcripts = list(transcripts or [])
         self.spoken = []
 
-    async def record_and_transcribe(self):
+    async def record_and_transcribe(self, on_level=None):
         return self._transcripts.pop(0) if self._transcripts else None
 
     async def speak(self, text):

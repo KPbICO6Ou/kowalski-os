@@ -11,8 +11,27 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 
 from .types import AudioClip, Utterance
+
+
+@contextlib.contextmanager
+def _quiet_alsa():
+    """Hide PortAudio/ALSA's C-level probe chatter (it writes to fd 2 directly,
+    e.g. paInvalidSampleRate when we try 16 kHz on a raw hw device)."""
+    try:
+        saved, devnull = os.dup(2), os.open(os.devnull, os.O_WRONLY)
+    except OSError:
+        yield
+        return
+    os.dup2(devnull, 2)
+    try:
+        yield
+    finally:
+        os.dup2(saved, 2)
+        os.close(devnull)
+        os.close(saved)
 
 
 def _resolve_device(device, want_output: bool):
@@ -176,17 +195,18 @@ class EnergyVadRecorder:
         # back to the device's native rate and resample the PCM afterwards.
         capture_sr = self.sample_rate
         block = int(capture_sr * 0.03)  # 30 ms blocks
-        try:
-            stream = sd.RawInputStream(samplerate=capture_sr, channels=1,
-                                       dtype="int16", blocksize=block, device=dev)
-            stream.start()
-        except Exception:
-            qd = dev if dev is not None else sd.default.device[0]
-            capture_sr = int(sd.query_devices(qd)["default_samplerate"])
-            block = int(capture_sr * 0.03)
-            stream = sd.RawInputStream(samplerate=capture_sr, channels=1,
-                                       dtype="int16", blocksize=block, device=dev)
-            stream.start()
+        with _quiet_alsa():  # the 16 kHz probe failing on a hw device is expected, not noise
+            try:
+                stream = sd.RawInputStream(samplerate=capture_sr, channels=1,
+                                           dtype="int16", blocksize=block, device=dev)
+                stream.start()
+            except Exception:
+                qd = dev if dev is not None else sd.default.device[0]
+                capture_sr = int(sd.query_devices(qd)["default_samplerate"])
+                block = int(capture_sr * 0.03)
+                stream = sd.RawInputStream(samplerate=capture_sr, channels=1,
+                                           dtype="int16", blocksize=block, device=dev)
+                stream.start()
 
         max_blocks = max(1, int(self.max_seconds * capture_sr / block))
         calib_blocks = 8                  # ~240 ms to measure the noise floor
