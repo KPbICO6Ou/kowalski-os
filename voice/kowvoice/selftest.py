@@ -169,9 +169,13 @@ async def run_test(
     mic = _device_label(settings.input_device, 0) if real_used else (settings.input_device or "mock")
     spk = _device_label(settings.output_device, 1) if real_used else (settings.output_device or "mock")
 
+    import time
+
     async def say(text: str) -> None:
         on_text(f"{CYAN}TTS{RESET} › {text}")
+        t0 = time.monotonic()
         clip = await tts.synthesize(text)
+        on_text(f"{DIM}sys ·   synthesized in {time.monotonic() - t0:.1f}s — speaking…{RESET}")
         await sink.play(clip)
 
     try:
@@ -184,13 +188,16 @@ async def run_test(
             await say(phrases["nospeech"])
             return await _diagnose(settings, "no speech captured from the microphone",
                                    llm, probe_fn, on_text)
+        on_text(f"{DIM}sys › recorded — transcribing…{RESET}")
+        t0 = time.monotonic()
         transcript = await stt.transcribe(utterance, language=settings.stt_language or None)
+        stt_s = time.monotonic() - t0
         text = (transcript.text or "").strip()
         if not text:
             await say(phrases["nospeech"])
             return await _diagnose(settings, "STT returned an empty transcript",
                                    llm, probe_fn, on_text)
-        on_text(f"{GREEN}STT{RESET} › {text}")
+        on_text(f"{GREEN}STT{RESET} › {text}  {DIM}({stt_s:.1f}s){RESET}")
         await say(phrases["echo"].format(text=text))
         await say(phrases["done"])
         on_text(f"{DIM}sys ✓ voice round-trip OK{RESET}")
