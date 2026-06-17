@@ -11,6 +11,25 @@ from __future__ import annotations
 
 DIM = "\033[2m"
 RESET = "\033[0m"
+CYAN = "\033[36m"   # TTS lines
+GREEN = "\033[32m"  # STT lines
+
+
+def _device_label(configured: str, which: int) -> str:
+    """Human name of the device in use: the configured one, else the system
+    default (which=0 input, 1 output). Best-effort; never raises."""
+    if configured:
+        return configured
+    try:
+        import sounddevice as sd
+
+        idx = sd.default.device[which]
+        if isinstance(idx, int) and idx >= 0:
+            return sd.query_devices(idx)["name"]
+    except Exception:
+        pass
+    return "system default"
+
 
 PHRASES = {
     "en": {
@@ -37,11 +56,12 @@ def _real_components(settings):
     from .stt_http import HttpSttClient
     from .tts_http import HttpTtsClient
 
+    silence_ms = min(settings.vad_silence_ms, 400)  # snappier end-of-speech for the test
     return (
-        EnergyVadRecorder(settings.sample_rate, settings.vad_silence_ms),
+        EnergyVadRecorder(settings.sample_rate, silence_ms, device=settings.input_device),
         HttpSttClient(settings.stt_url, settings.stt_token),
         HttpTtsClient(settings.tts_url, settings.tts_token, settings.tts_engine),
-        SoundDeviceSink(),
+        SoundDeviceSink(device=settings.output_device),
     )
 
 
@@ -134,7 +154,8 @@ async def run_test(
         settings = VoiceSettings.load()
     phrases = _phrases(settings.stt_language)
 
-    if None in (recorder, stt, tts, sink):
+    real_used = None in (recorder, stt, tts, sink)
+    if real_used:
         try:
             real = _real_components(settings)
         except Exception as exc:
@@ -145,14 +166,19 @@ async def run_test(
         tts = tts or real[2]
         sink = sink or real[3]
 
+    mic = _device_label(settings.input_device, 0) if real_used else (settings.input_device or "mock")
+    spk = _device_label(settings.output_device, 1) if real_used else (settings.output_device or "mock")
+
     async def say(text: str) -> None:
-        on_text(f"🔊 {text}")
+        on_text(f"{CYAN}TTS{RESET} › {text}")
         clip = await tts.synthesize(text)
         await sink.play(clip)
 
     try:
+        on_text(f"{DIM}sys › mic: {mic}  ·  speaker: {spk}{RESET}")
+        on_text(f"{DIM}sys › say a short phrase after the greeting — it gets echoed back{RESET}")
         await say(phrases["greet"])
-        on_text(f"{DIM}[listening…]{RESET}")
+        on_text(f"{DIM}sys › listening… speak now (mic: {mic}){RESET}")
         utterance = await recorder.record_utterance()
         if utterance is None or utterance.is_empty:
             await say(phrases["nospeech"])
@@ -164,10 +190,10 @@ async def run_test(
             await say(phrases["nospeech"])
             return await _diagnose(settings, "STT returned an empty transcript",
                                    llm, probe_fn, on_text)
-        on_text(f"heard: “{text}”")
+        on_text(f"{GREEN}STT{RESET} › {text}")
         await say(phrases["echo"].format(text=text))
         await say(phrases["done"])
-        on_text("✓ voice round-trip OK")
+        on_text(f"{DIM}sys ✓ voice round-trip OK{RESET}")
         return 0
     except Exception as exc:
         return await _diagnose(settings, f"voice round-trip failed: {exc}",

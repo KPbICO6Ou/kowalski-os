@@ -50,7 +50,7 @@ async def test_happy_round_trip_speaks_greet_echo_done():
     assert rc == 0
     out = "\n".join(lines)
     assert "Hello. Please say something" in out  # greeting spoken
-    assert "heard: “turn on the lights”" in out
+    assert "› turn on the lights" in out  # STT-labelled transcript line
     assert "You said: turn on the lights" in out  # echo spoken
     assert "Test complete." in out
     # greet, echo, done were all synthesized
