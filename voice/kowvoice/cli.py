@@ -8,7 +8,8 @@
   kow-voice check               probe STT, TTS, and the kow-core socket
   kow-voice test                round-trip self-test (greet → record → STT → echo)
   kow-voice chat                voice + text chat in one conversation
-  kow-voice train <phrase>      prepare a custom wake word
+  kow-voice wake <phrase>       set up a personal wake word (record + train + test)
+  kow-voice train <phrase>      prepare a custom wake word (synthetic; legacy)
 """
 
 from __future__ import annotations
@@ -80,6 +81,15 @@ def main(argv: list[str] | None = None) -> int:
     fit.add_argument("phrase", help="wake phrase recorded with wake-record, e.g. kowalski")
     fit.add_argument("--augment", type=int, default=80, help="augmented copies per positive (default 80)")
     fit.add_argument("--epochs", type=int, default=150, help="training epochs (default 150)")
+    wk = sub.add_parser("wake", help="set up a personal wake word end-to-end (record + train + test)")
+    wk.add_argument("phrase", help="wake phrase, e.g. kowalski")
+    wk.add_argument("--count", type=int, default=30, help="positive takes to record (default 30)")
+    wk.add_argument("--negatives", type=int, default=12, help="negative (other-speech) takes (default 12)")
+    wk.add_argument("--fit-only", dest="fit_only", action="store_true",
+                    help="skip recording, retrain on existing samples")
+    wk.add_argument("--rerecord", action="store_true", help="record fresh even if samples exist")
+    wk.add_argument("--no-test", dest="no_test", action="store_true", help="skip the live test at the end")
+    wk.add_argument("--yes", action="store_true", help="non-interactive: reuse samples, skip the test prompt")
 
     train = sub.add_parser("train", help="prepare a custom wake word (register a model or train)")
     train.add_argument("phrase", help="wake phrase, e.g. kowalski or hey_jarvis")
@@ -151,6 +161,18 @@ def main(argv: list[str] | None = None) -> int:
         from .wake_fit import run_fit
 
         return run_fit(args.phrase, augment=args.augment, epochs=args.epochs)
+    if args.command == "wake":
+        from .wake_setup import run_setup
+
+        try:
+            return asyncio.run(run_setup(
+                args.phrase, count=args.count, negatives=args.negatives,
+                fit_only=args.fit_only, rerecord=args.rerecord,
+                no_test=args.no_test, yes=args.yes,
+            ))
+        except KeyboardInterrupt:
+            print()
+            return 0
     if args.command == "train":
         from .train import run_train
 

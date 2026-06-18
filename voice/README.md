@@ -78,7 +78,24 @@ custom phrase such as **"kowalski" needs a trained model file**. Until then, use
 `both` so push-to-talk always works while you dial in the model. The RMS energy
 VAD endpoints utterances; silero-vad is the production upgrade.
 
-### Training / registering a wake word
+### Personal wake word — one command (recommended)
+
+Train a wake word on **your own voice**, end to end, with a single command:
+
+```sh
+kow-voice wake kowalski        # record your voice -> train -> verify -> register -> test
+```
+
+It records ~30 spoken takes plus a few other-speech negatives (audio cues guide
+you), trains a small openWakeWord-compatible model on them locally (CPU, ~5 min),
+verifies it against your own recordings, picks a threshold, writes it into
+`kowalski.conf` (`KOW_WAKE_MODEL`/`KOW_WAKE_WORD` + `KOW_WAKE_MODE=both`), and
+offers a live test. Useful flags: `--fit-only` (retrain on existing recordings),
+`--rerecord`, `--count`/`--negatives`, `--no-test`, `--yes`. Needs `torch`+`onnx`
+(the `wake-fit` extra). The individual steps are also available as `kow-voice
+wake-record` / `wake-fit` / `wake-test`.
+
+### Registering an existing / synthetic wake word (legacy)
 
 ```sh
 kow-voice train hey_jarvis                 # pretrained: just configures it

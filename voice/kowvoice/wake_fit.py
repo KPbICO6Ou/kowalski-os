@@ -85,6 +85,50 @@ def _net(layer_dim: int = 128):
     return Net()
 
 
+def verify_recordings(slug: str, model_path) -> dict:
+    """Score the recorded positives/negatives through the model with openWakeWord
+    exactly as the live listener would (peak score per clip). Returns
+    {"pos": [...], "neg": [...]} — the real end-to-end check, not held-out windows."""
+    import wave
+
+    import numpy as np
+
+    from openwakeword.model import Model
+
+    from .wake_record import samples_dir
+
+    model = Model(wakeword_models=[str(model_path)], inference_framework="onnx")
+
+    def peak(path) -> float:
+        wav = wave.open(str(path))
+        x = np.frombuffer(wav.readframes(wav.getnframes()), dtype=np.int16)
+        if wav.getnchannels() == 2:
+            x = x[::2]
+        if hasattr(model, "reset"):
+            model.reset()
+        best = 0.0
+        for i in range(0, max(1, x.size - 1280), 1280):
+            scores = model.predict(x[i:i + 1280])
+            if scores:
+                best = max(best, max(scores.values()))
+        return best
+
+    base = samples_dir(slug)
+    pos = [peak(p) for p in sorted((base / "positive").glob("*.wav"))]
+    neg = [peak(p) for p in sorted((base / "negative").glob("*.wav"))]
+    return {"pos": pos, "neg": neg}
+
+
+def calibrate_threshold(pos: list, neg: list) -> float:
+    """Pick a decision threshold from the REAL recording scores: fire on every real
+    positive and reject every real negative when they separate; otherwise favor
+    recall (sit just below the quietest positive). Clamped to [0.30, 0.70]."""
+    neg_max = float(max(neg)) if neg else 0.0
+    pos_min = float(min(pos)) if pos else 1.0
+    thr = neg_max + 0.05 if neg_max + 0.05 <= pos_min else pos_min - 0.02
+    return round(min(0.70, max(0.30, thr)), 2)
+
+
 def run_fit(phrase: str, *, augment: int = 80, neg_count: int = 6000,
             epochs: int = 150, settings=None) -> int:
     try:
@@ -103,6 +147,7 @@ def run_fit(phrase: str, *, augment: int = 80, neg_count: int = 6000,
     from .train import _merge_conf, model_path_for, slugify
     from .wake_record import samples_dir
 
+    torch.manual_seed(0)  # reproducible training (augmentation rng is seeded too)
     settings = settings or VoiceSettings.load()
     slug = slugify(phrase)
     pos_clips = _load_wavs(samples_dir(slug) / "positive")
@@ -184,6 +229,24 @@ def run_fit(phrase: str, *, augment: int = 80, neg_count: int = 6000,
     # legacy exporter (needs `onnx`, not `onnxscript`); tiny model -> single .onnx
     torch.onnx.export(net, torch.rand(1, WIN, 96), str(dest),
                       input_names=["x"], output_names=["sigmoid"], dynamo=False)
+
+    # Real end-to-end check on the actual recordings, and a threshold derived from
+    # them (trumps the augmented-window threshold above). Best-effort: a verify
+    # failure must not lose a trained model, so fall back to thr.
+    try:
+        scored = verify_recordings(slug, dest)
+        thr = calibrate_threshold(scored["pos"], scored["neg"])
+        pos_fire = sum(s >= thr for s in scored["pos"])
+        neg_fire = sum(s >= thr for s in scored["neg"])
+        n_pos, n_neg = len(scored["pos"]), len(scored["neg"])
+        print(f"  recordings @thr={thr:.2f}: {pos_fire}/{n_pos} positives fire · "
+              f"{neg_fire}/{n_neg} negatives")
+        if (n_pos and pos_fire / n_pos < 0.9) or (n_neg and neg_fire / n_neg > 0.15):
+            print("  ! weak model — record more/clearer takes or more varied "
+                  "negatives, then rerun.")
+    except Exception as exc:
+        print(f"  (skipped real-recording verify: {type(exc).__name__}: {exc})")
+
     _merge_conf({"KOW_WAKE_MODEL": str(dest), "KOW_WAKE_WORD": slug,
                  "KOW_WAKE_THRESHOLD": f"{thr:.2f}"}, None)
     print(f"registered: {dest}\n"
