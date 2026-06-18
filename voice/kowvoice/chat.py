@@ -219,7 +219,7 @@ async def _read_or_wake(loop_ev, reader, wake):
     wake_task.cancel()  # typing won (or wake errored) -> drop the listener
     with contextlib.suppress(BaseException):
         await wake_task
-    return read_task.result()
+    return await read_task  # awaits typing if wake errored first; re-raises EOF/etc.
 
 
 class VoiceChatIO:
