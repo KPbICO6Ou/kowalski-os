@@ -187,7 +187,8 @@ def _build_chat_wake(settings):
     try:
         from .audio_devices import OpenWakeWordListener
 
-        return OpenWakeWordListener(model, settings.sample_rate, settings.wake_threshold)
+        return OpenWakeWordListener(model, settings.sample_rate, settings.wake_threshold,
+                                    device=settings.input_device)
     except Exception:
         return None
 

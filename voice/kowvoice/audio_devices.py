@@ -74,10 +74,12 @@ class OpenWakeWordListener:
     bespoke phrase such as "kowalski" requires a trained model file — point
     `model` at its path."""
 
-    def __init__(self, model: str, sample_rate: int = 16000, threshold: float = 0.5) -> None:
+    def __init__(self, model: str, sample_rate: int = 16000, threshold: float = 0.5,
+                 device: str = "") -> None:
         self.model = model
         self.sample_rate = sample_rate
         self.threshold = threshold
+        self.device = device or None  # None = system default input
         self._oww = None
 
     def _load(self):
@@ -94,29 +96,56 @@ class OpenWakeWordListener:
             return Model(wakeword_models=[model], inference_framework="onnx")
         return Model(inference_framework="onnx")
 
-    async def wait_for_wake(self) -> None:  # pragma: no cover - needs hardware + model
+    async def _frames(self):  # pragma: no cover - needs hardware
+        """Yield 16 kHz int16 frames (~80 ms) from the configured input device.
+        Opens at 16 kHz (what openWakeWord wants); a raw hw device that rejects it
+        falls back to the native rate + linear resample, like EnergyVadRecorder."""
         import numpy as np
         import sounddevice as sd
 
-        if self._oww is None:
-            self._oww = self._load()
-
-        frame = 1280  # openWakeWord expects 80 ms frames at 16 kHz
+        dev = _resolve_device(self.device, want_output=False)
+        target, frame16 = 16000, 1280
+        capture_sr, block = target, frame16
+        with _quiet_alsa():  # 16 kHz failing on a hw device is expected, not noise
+            try:
+                stream = sd.RawInputStream(samplerate=target, channels=1, dtype="int16",
+                                           blocksize=frame16, device=dev)
+                stream.start()
+            except Exception:
+                qd = dev if dev is not None else sd.default.device[0]
+                capture_sr = int(sd.query_devices(qd)["default_samplerate"])
+                block = max(1, int(capture_sr * 0.08))  # 80 ms at the native rate
+                stream = sd.RawInputStream(samplerate=capture_sr, channels=1, dtype="int16",
+                                           blocksize=block, device=dev)
+                stream.start()
         loop = asyncio.get_running_loop()
-        stream = sd.RawInputStream(
-            samplerate=self.sample_rate, channels=1, dtype="int16", blocksize=frame
-        )
-        stream.start()
         try:
             while True:
-                data, _ = await loop.run_in_executor(None, stream.read, frame)
+                data, _ = await loop.run_in_executor(None, stream.read, block)
                 pcm = np.frombuffer(bytes(data), dtype=np.int16)
-                scores = self._oww.predict(pcm)
-                if scores and max(scores.values()) >= self.threshold:
-                    return
+                if capture_sr != target and pcm.size:
+                    n_out = int(pcm.size * target / capture_sr)
+                    pos = np.linspace(0, pcm.size - 1, n_out)
+                    pcm = np.interp(pos, np.arange(pcm.size), pcm).astype(np.int16)
+                yield pcm
         finally:
             stream.stop()
             stream.close()
+
+    async def wait_for_wake(self) -> None:  # pragma: no cover - needs hardware + model
+        if self._oww is None:
+            self._oww = self._load()
+        async for pcm in self._frames():
+            scores = self._oww.predict(pcm)
+            if scores and max(scores.values()) >= self.threshold:
+                return
+
+    async def scores(self):  # pragma: no cover - needs hardware + model
+        """Yield the raw {model: score} dict per frame — for live diagnostics/tuning."""
+        if self._oww is None:
+            self._oww = self._load()
+        async for pcm in self._frames():
+            yield self._oww.predict(pcm)
 
 
 class CombinedWake:
@@ -157,7 +186,8 @@ def build_wake(settings):
     if mode == "push_to_talk":
         return PushToTalkWake()
     model = settings.wake_model or settings.wake_word
-    oww = OpenWakeWordListener(model, settings.sample_rate, settings.wake_threshold)
+    oww = OpenWakeWordListener(model, settings.sample_rate, settings.wake_threshold,
+                               device=settings.input_device)
     if mode == "wake_word":
         return oww
     if mode == "both":

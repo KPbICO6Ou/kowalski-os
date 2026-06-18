@@ -70,6 +70,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser(
         "test", help="round-trip self-test: greet → record → STT → echo (LLM diagnosis on failure)"
     )
+    sub.add_parser("wake-test", help="live wake-word score meter — say the word and tune the threshold")
 
     train = sub.add_parser("train", help="prepare a custom wake word (register a model or train)")
     train.add_argument("phrase", help="wake phrase, e.g. kowalski or hey_jarvis")
@@ -114,6 +115,12 @@ def main(argv: list[str] | None = None) -> int:
         from .selftest import run_test
 
         return asyncio.run(run_test())
+    if args.command == "wake-test":
+        try:
+            return asyncio.run(cmd_wake_test())
+        except KeyboardInterrupt:
+            print()
+            return 0
     if args.command == "train":
         from .train import run_train
 
@@ -219,6 +226,52 @@ def _require_mic() -> str | None:
             "Install the mic extra: pip install -e 'voice[mic]'"
         )
     return None
+
+
+async def cmd_wake_test() -> int:
+    """Live wake-word score meter: say the word, watch the score, tune the
+    threshold. Surfaces mic/model errors the wake loop would otherwise swallow."""
+    import importlib.util
+    import sys
+
+    settings = VoiceSettings.load()
+    err = _require_mic()
+    if err:
+        print(err, file=sys.stderr)
+        return 2
+    if importlib.util.find_spec("openwakeword") is None:
+        print("wake word needs openWakeWord: pip install --no-deps openwakeword", file=sys.stderr)
+        return 2
+    model = settings.wake_model or settings.wake_word
+    if not model:
+        print("no wake model configured (set KOW_WAKE_MODEL or KOW_WAKE_WORD)", file=sys.stderr)
+        return 2
+
+    from .audio_devices import OpenWakeWordListener
+
+    listener = OpenWakeWordListener(model, settings.sample_rate, settings.wake_threshold,
+                                    device=settings.input_device)
+    print(f"wake-test: mic '{settings.input_device or 'system default'}', model '{model}', "
+          f"threshold {settings.wake_threshold}.")
+    print("Say the wake word; watch the score (Ctrl-C to stop). "
+          "If it peaks below the threshold, lower KOW_WAKE_THRESHOLD.\n")
+    peak = 0.0
+    try:
+        async for scores in listener.scores():
+            score = max(scores.values()) if scores else 0.0
+            peak = max(peak, score)
+            filled = int(min(1.0, score) * 30)
+            bar = "█" * filled + "·" * (30 - filled)
+            hit = "  ◀ FIRE" if score >= settings.wake_threshold else ""
+            sys.stdout.write(f"\rscore {score:.3f} [{bar}] peak {peak:.3f}{hit}\033[K")
+            sys.stdout.flush()
+    except Exception as exc:
+        import traceback
+
+        print(f"\nwake listener error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(traceback.format_exc(), file=sys.stderr)
+        return 1
+    return 0
 
 
 async def cmd_run() -> int:
