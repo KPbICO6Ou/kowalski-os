@@ -99,7 +99,7 @@ def render_train_sh(spec: dict) -> str:
         'echo "[kowalski-train] self-patching: piper-phonemize-fix, webrtcvad-wheels, '
         "scipy<1.17, piper-model-size, mit-rirs, config-merge, resumable-features, "
         'generate_samples-restore, torch-weights-only, gpu-auto(legacy-cu126/cpu), '
-        'oww-feature-models"\n'
+        'oww-feature-models, skip-tflite"\n'
         'echo "[kowalski-train] resume a failed step with:  ./train.sh --from <step>"\n'
         'mkdir -p "$WORK" && cd "$WORK"\n'
         '[ -d openwakeword-trainer ] || git clone --depth 1 "$REPO" openwakeword-trainer\n'
@@ -247,6 +247,18 @@ def render_train_sh(spec: dict) -> str:
         'echo "[kowalski-train] fetching openWakeWord feature models…"\n'
         'python -c "import openwakeword.utils as u; u.download_models()" || echo '
         '"[kowalski-train] WARNING: openWakeWord model download failed (augment needs melspectrogram.onnx)"\n'
+        "# openWakeWord 0.6.0 also converts the trained .onnx to .tflite via onnx_tf +\n"
+        "# tensorflow (not installed; Kowalski only needs the .onnx). Make that a no-op in\n"
+        "# the installed package so the train step finishes after the onnx export.\n"
+        "python - <<'POW'\n"
+        "import pathlib, openwakeword\n"
+        'p = pathlib.Path(openwakeword.__file__).parent / "train.py"\n'
+        "s = p.read_text()\n"
+        'sig = "def convert_onnx_to_tflite(onnx_model_path, output_path):"\n'
+        'if sig in s and "kowalski-skip-tflite" not in s:\n'
+        '    p.write_text(s.replace(sig, sig + "\\n    return  # kowalski-skip-tflite (onnx only)"))\n'
+        '    print("[kowalski-train] patched openWakeWord: tflite conversion skipped (onnx only)")\n'
+        "POW\n"
         f'python train_wakeword.py --config configs/{slug}.yaml "$@"\n'
         "# Pack the model (graph + its .onnx.data weights) into ONE archive so only\n"
         "# a single file travels back; kow-voice train --model unpacks it.\n"
