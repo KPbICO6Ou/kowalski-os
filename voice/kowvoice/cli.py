@@ -247,10 +247,14 @@ async def cmd_wake_test() -> int:
         print("no wake model configured (set KOW_WAKE_MODEL or KOW_WAKE_WORD)", file=sys.stderr)
         return 2
 
-    from .audio_devices import OpenWakeWordListener
+    from .audio_devices import OpenWakeWordListener, SoundDeviceSink
+    from .cues import sound
+    from .tts_http import HttpTtsClient
+    from .types import AudioClip
 
     listener = OpenWakeWordListener(model, settings.sample_rate, settings.wake_threshold,
                                     device=settings.input_device)
+    sink = SoundDeviceSink(device=settings.output_device)
     print(f"wake-test: mic '{settings.input_device or 'system default'}', model '{model}', "
           f"threshold {settings.wake_threshold}.")
 
@@ -258,27 +262,40 @@ async def cmd_wake_test() -> int:
     # the user can match it. Best-effort: skipped if TTS/output is unavailable.
     phrase = settings.wake_word or "kowalski"
     try:
-        from .audio_devices import SoundDeviceSink
-        from .tts_http import HttpTtsClient
-
         print(f"Скажите «{phrase}» — вот как это звучит:")
         clip = await HttpTtsClient(settings.tts_url, settings.tts_token,
                                    language="en").synthesize(phrase)
-        await SoundDeviceSink(device=settings.output_device).play(clip)
+        await sink.play(clip)
     except Exception as exc:
         print(f"(эталон не проигран: {exc})")
 
-    print("Теперь повторите; следите за score (Ctrl-C — стоп). "
-          "Если пик ниже порога — снизьте KOW_WAKE_THRESHOLD.\n")
+    bloop_path = sound("bloop.wav")  # success chime on each detection
+    bloop = AudioClip(audio=bloop_path.read_bytes(), format="wav") if bloop_path else None
+
+    print("Теперь повторяйте — при срабатывании прозвучит сигнал, можно тренироваться "
+          "(Ctrl-C — стоп). Если пик ниже порога — снизьте KOW_WAKE_THRESHOLD.\n")
     peak = 0.0
+    hits = 0
+    armed = True  # ready to count/announce the next detection
     try:
         async for scores, rms in listener.scores():
             score = max(scores.values()) if scores else 0.0
             peak = max(peak, score)
+            if score >= settings.wake_threshold:
+                if armed:
+                    armed, hits = False, hits + 1
+                    if bloop is not None:
+                        try:
+                            await sink.play(bloop)
+                        except Exception:
+                            pass
+            elif score < settings.wake_threshold * 0.5:
+                armed = True  # re-arm once the score falls back down
             lvl = int(min(1.0, rms * 8) * 12)
             lbar = "█" * lvl + "·" * (12 - lvl)
             sbar = "█" * int(min(1.0, score) * 20) + "·" * (20 - int(min(1.0, score) * 20))
-            hit = "  ◀ FIRE" if score >= settings.wake_threshold else ""
+            hit = f"  ◀ FIRE  ✓{hits}" if score >= settings.wake_threshold else (
+                f"  (✓{hits})" if hits else "")
             sys.stdout.write(
                 f"\rmic [{lbar}] {rms:.3f} │ score {score:.3f} [{sbar}] peak {peak:.3f}{hit}\033[K"
             )

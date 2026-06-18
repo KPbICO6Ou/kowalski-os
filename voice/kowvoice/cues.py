@@ -9,15 +9,19 @@ from pathlib import Path
 DISABLED = {"off", "none", "0", "false", "no"}
 
 
-def default_cue() -> Path:
-    """The shipped earcon: repo-root ./sounds/listen.wav (editable installs), with
-    a package-local fallback. Returns the first that exists, else the repo-root path."""
+def sound(name: str) -> Path | None:
+    """Locate a bundled sound file: repo-root ./sounds/<name> (editable installs)
+    or a package-local fallback. None if neither exists."""
     here = Path(__file__).resolve()
-    candidates = (
-        here.parents[2] / "sounds" / "listen.wav",  # <repo>/sounds (editable install)
-        here.parent / "sounds" / "listen.wav",       # packaged fallback
-    )
-    return next((c for c in candidates if c.exists()), candidates[0])
+    for cand in (here.parents[2] / "sounds" / name, here.parent / "sounds" / name):
+        if cand.exists():
+            return cand
+    return None
+
+
+def default_cue() -> Path:
+    """The shipped listening earcon; falls back to the repo-root path if absent."""
+    return sound("listen.wav") or Path(__file__).resolve().parents[2] / "sounds" / "listen.wav"
 
 
 def listen_cue_path(settings) -> Path | None:
