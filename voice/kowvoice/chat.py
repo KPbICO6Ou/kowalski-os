@@ -314,13 +314,19 @@ class VoiceChatIO:
         return await self._recorder.record_utterance(on_level=on_level)
 
     async def transcribe(self, utterance) -> str | None:
-        """Send a recorded utterance to STT; returns the text (or None if empty)."""
+        """Send a recorded utterance to STT; returns the text, or None when empty
+        or a known Whisper silence-hallucination ('Спасибо за просмотр', etc.)."""
+        from .stt_http import looks_like_hallucination
+
         if utterance is None or utterance.is_empty:
             return None
         transcript = await self._stt.transcribe(
             utterance, language=self.settings.stt_language or None
         )
-        return (transcript.text or "").strip() or None
+        text = (transcript.text or "").strip()
+        if not text or looks_like_hallucination(text):
+            return None
+        return text
 
     async def record_and_transcribe(self, on_level=None) -> str | None:
         return await self.transcribe(await self.record(on_level=on_level))

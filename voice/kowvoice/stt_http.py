@@ -14,6 +14,40 @@ from .types import Transcript, Utterance
 
 STT_LANGUAGE_RE = re.compile(r"^[a-z]{2,3}$")  # /api/stt accepts a 2-3 letter ISO code or "auto"
 
+# Distinctive phrases Whisper hallucinates from silence/noise (YouTube-caption
+# residue in its training data). Matched as substrings of the normalized text;
+# only phrases a user would never say to an assistant — short greetings like
+# "привет"/"спасибо" are NOT here (the recorder's speech gate handles those).
+HALLUCINATION_MARKERS = (
+    "продолжение следует",
+    "продолжение в следующей серии",
+    "спасибо за просмотр",
+    "спасибо за внимание",
+    "субтитры сделал",
+    "субтитры делал",
+    "субтитры создавал",
+    "редактор субтитров",
+    "субтитры подготовил",
+    "подписывайтесь на канал",
+    "ставьте лайки",
+    "thanks for watching",
+    "thank you for watching",
+    "please subscribe",
+    "subtitles by",
+    "amara.org",
+)
+
+
+def looks_like_hallucination(text: str) -> bool:
+    """True when the transcript is a known Whisper silence-hallucination phrase."""
+    norm = re.sub(r"\s+", " ", (text or "").strip().lower())
+    if not norm:
+        return False
+    stripped = norm.strip(" .,!?-—…")
+    if stripped in ("you", "thank you", "bye", "продолжение следует"):
+        return True
+    return any(marker in norm for marker in HALLUCINATION_MARKERS)
+
 
 def stt_language(lang: str | None) -> str | None:
     """Normalize a language to what /api/stt accepts: a 2-3 letter ISO code or

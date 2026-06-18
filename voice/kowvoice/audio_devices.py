@@ -220,6 +220,7 @@ class EnergyVadRecorder:
     def __init__(
         self, sample_rate: int = 16000, silence_ms: int = 700, threshold: float = 0.02,
         device: str = "", max_seconds: float = 15.0, onset_timeout: float = 3.0,
+        min_speech_ms: int = 200,
     ) -> None:
         self.sample_rate = sample_rate
         self.silence_ms = silence_ms
@@ -227,6 +228,7 @@ class EnergyVadRecorder:
         self.device = device or None  # None = system default input
         self.max_seconds = max_seconds  # hard cap so a silent/wrong device can't hang
         self.onset_timeout = onset_timeout  # give up if no speech starts in this long
+        self.min_speech_ms = min_speech_ms  # reject blips: need this much real speech
 
     async def record_utterance(self, on_level=None) -> Utterance | None:  # pragma: no cover
         import numpy as np
@@ -238,6 +240,7 @@ class EnergyVadRecorder:
         captured: list[bytes] = []
         trailing_silence = 0
         heard_speech = False
+        speech_blocks = 0  # how many blocks actually crossed the speech threshold
         loop = asyncio.get_running_loop()
 
         # Prefer 16 kHz (what STT wants); raw ALSA hw devices reject it, so fall
@@ -259,6 +262,7 @@ class EnergyVadRecorder:
 
         max_blocks = max(1, int(self.max_seconds * capture_sr / block))
         onset_blocks = max(1, int(self.onset_timeout * capture_sr / block))
+        min_speech_blocks = max(1, int(self.min_speech_ms / 1000 * capture_sr / block))
         calib_blocks = 8                  # ~240 ms to measure the noise floor
         noise: list[float] = []
         threshold = self.threshold        # refined from the noise floor below
@@ -282,6 +286,7 @@ class EnergyVadRecorder:
 
                 if rms >= threshold:
                     heard_speech = True
+                    speech_blocks += 1
                     trailing_silence = 0
                 elif heard_speech:
                     trailing_silence += 1
@@ -294,7 +299,9 @@ class EnergyVadRecorder:
             stream.stop()
             stream.close()
 
-        if not heard_speech:
+        # Reject silence and brief blips (a click/breath that tripped the threshold
+        # for a moment): Whisper hallucinates whole sentences from such clips.
+        if not heard_speech or speech_blocks < min_speech_blocks:
             return None
         samples = np.frombuffer(b"".join(captured), dtype=np.int16)
         if capture_sr != self.sample_rate and samples.size:
