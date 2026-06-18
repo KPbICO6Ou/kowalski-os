@@ -275,10 +275,10 @@ async def cmd_wake_test() -> int:
     except Exception as exc:
         print(f"(подсказка недоступна: {exc})")
 
-    async def play_prompt() -> None:
+    async def play(*clips) -> None:
         try:
             with _quiet_alsa():  # keep ALSA's device-open chatter off the display
-                for clip in (say, ref):
+                for clip in clips:
                     if clip is not None:
                         await sink.play(clip)
         except Exception:
@@ -287,8 +287,8 @@ async def cmd_wake_test() -> int:
     bloop_path = sound("bloop.wav")  # success chime on each detection
     bloop = AudioClip(audio=bloop_path.read_bytes(), format="wav") if bloop_path else None
 
-    print(f"Скажите «{phrase}».  Пробел — повторить подсказку, q — выход.\n")
-    await play_prompt()
+    print(f"Скажите «{phrase}».  Пробел — повторить «{phrase}», q — выход.\n")
+    await play(say, ref)  # full prompt once: "Скажите" + the word
 
     peak = 0.0
     hits = 0
@@ -307,7 +307,7 @@ async def cmd_wake_test() -> int:
                 if ch == b" ":
                     sys.stdout.write("\r\033[K")
                     sys.stdout.flush()
-                    await play_prompt()
+                    await play(ref)  # Space replays just the word, no "Скажите"
             score = max(scores.values()) if scores else 0.0
             peak = max(peak, score)
             if score >= settings.wake_threshold:
