@@ -6,7 +6,21 @@ vs synthesis."""
 
 from __future__ import annotations
 
+import re
+
 from .types import AudioClip
+
+TTS_LANGUAGE_RE = re.compile(r"^[a-z]{2}$")  # /api/tts validates an exactly-2-letter language
+
+
+def tts_language(lang: str | None) -> str | None:
+    """Normalize a language to what /api/tts accepts: exactly 2 letters; a locale
+    like "en-US" -> "en". "auto" (STT-only) and 3-letter codes -> None, so we omit
+    the field and let the server pick its default instead of 400-ing."""
+    if not lang:
+        return None
+    primary = lang.strip().lower().split("-")[0]  # en-US -> en, auto -> auto
+    return primary if TTS_LANGUAGE_RE.match(primary) else None
 
 
 class HttpTtsClient:
@@ -30,8 +44,9 @@ class HttpTtsClient:
         # (Marshmallow strict) — sending "format"/"engine" 400s; the server picks the
         # engine itself. `language` is honoured per-request (empty -> server default).
         body: dict = {"text": text}
-        if self.language:
-            body["language"] = self.language
+        lang = tts_language(self.language)
+        if lang:
+            body["language"] = lang
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.post(f"{self.url}/api/tts", headers=self._headers(), json=body)
             resp.raise_for_status()

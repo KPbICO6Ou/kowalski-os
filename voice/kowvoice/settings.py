@@ -125,5 +125,8 @@ class VoiceSettings:
             socket_path=socket_path,
             input_device=values["KOW_VOICE_INPUT_DEVICE"],
             output_device=values["KOW_VOICE_OUTPUT_DEVICE"],
-            tts_language=values["TTS_LANGUAGE"] or values["STT_LANGUAGE"],
+            # TTS follows STT_LANGUAGE only as a convenience default; "auto" is an
+            # STT-only value (TTS needs a concrete 2-letter code), so don't inherit it.
+            tts_language=values["TTS_LANGUAGE"]
+            or ("" if values["STT_LANGUAGE"].strip().lower() == "auto" else values["STT_LANGUAGE"]),
         )

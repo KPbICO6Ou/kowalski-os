@@ -7,9 +7,25 @@ server falls back to its own WHISPER_LANGUAGE when it is omitted."""
 from __future__ import annotations
 
 import io
+import re
 import wave
 
 from .types import Transcript, Utterance
+
+STT_LANGUAGE_RE = re.compile(r"^[a-z]{2,3}$")  # /api/stt accepts a 2-3 letter ISO code or "auto"
+
+
+def stt_language(lang: str | None) -> str | None:
+    """Normalize a language to what /api/stt accepts: a 2-3 letter ISO code or
+    "auto"; a locale like "en-US" -> "en". Anything else -> None, so the server
+    falls back to its own WHISPER_LANGUAGE instead of 400-ing on an invalid value."""
+    if not lang:
+        return None
+    lang = lang.strip().lower()
+    if lang == "auto":
+        return "auto"
+    primary = lang.split("-")[0]  # en-US -> en
+    return primary if STT_LANGUAGE_RE.match(primary) else None
 
 
 def pcm_to_wav(pcm: bytes, sample_rate: int) -> bytes:
@@ -35,7 +51,8 @@ class HttpSttClient:
         import httpx
 
         wav = pcm_to_wav(utterance.pcm, utterance.sample_rate)
-        data = {"language": language} if language else {}
+        lang = stt_language(language)
+        data = {"language": lang} if lang else {}
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.post(
                 f"{self.url}/api/stt",
@@ -47,7 +64,7 @@ class HttpSttClient:
             payload = resp.json()
         return Transcript(
             text=payload.get("text", ""),
-            language=payload.get("language") or language,
+            language=payload.get("language") or lang,
             elapsed_s=payload.get("elapsed"),
         )
 
