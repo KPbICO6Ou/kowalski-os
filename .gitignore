@@ -37,3 +37,6 @@ CLAUDE.md
 .vscode/
 *.swp
 dist/
+
+# kow-voice train output: the packed trained model
+*-model.tar.gz
