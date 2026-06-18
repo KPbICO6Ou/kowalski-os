@@ -259,7 +259,21 @@ def render_train_sh(spec: dict) -> str:
         '    p.write_text(s.replace(sig, sig + "\\n    return  # kowalski-skip-tflite (onnx only)"))\n'
         '    print("[kowalski-train] patched openWakeWord: tflite conversion skipped (onnx only)")\n'
         "POW\n"
-        f'python train_wakeword.py --config configs/{slug}.yaml "$@"\n'
+        "# Auto-resume: a plain ./train.sh continues from the furthest finished step\n"
+        "# instead of redoing the long generate. Skipped if you pass --from/--step.\n"
+        'RESUME=""\n'
+        'case " $* " in\n'
+        '  *" --from "*|*" --step "*|*" --verify-only "*) ;;\n'
+        "  *)\n"
+        f'    if   [ -f "export/{slug}.onnx" ]; then RESUME="--from export"\n'
+        f'    elif [ -f "output/{slug}.onnx" ]; then RESUME="--from train"\n'
+        "    elif find output -name 'positive_features_train.npy' 2>/dev/null | grep -q .; then RESUME=\"--from train\"\n"
+        "    elif find output -path '*/positive_train/*.wav' 2>/dev/null | grep -q .; then RESUME=\"--from augment\"\n"
+        "    fi\n"
+        '    if [ -n "$RESUME" ]; then echo "[kowalski-train] auto-resume $RESUME (rm -rf output to start over)"; fi\n'
+        "    ;;\n"
+        "esac\n"
+        f'python train_wakeword.py --config configs/{slug}.yaml $RESUME "$@"\n'
         "# Pack the model (graph + its .onnx.data weights) into ONE archive so only\n"
         "# a single file travels back; kow-voice train --model unpacks it.\n"
         f'MODEL_FILES="{slug}.onnx"\n'
@@ -308,9 +322,10 @@ def render_readme(spec: dict) -> str:
         "./train.sh                 # clones openwakeword-trainer, installs, trains\n"
         "```\n\n"
         "`train.sh` handles the venv, dependency swaps and PYTHONPATH itself — never\n"
-        "activate anything by hand. If a step fails, fix it and **resume by re-running\n"
-        "with the step it printed**, e.g. `./train.sh --from generate` (args pass\n"
-        "straight through to `train_wakeword.py`; the early cached steps are fast). To\n"
+        "activate anything by hand. Just re-run `./train.sh`: it **auto-resumes** from\n"
+        "the furthest finished step (it won't redo the long generate). Force a specific\n"
+        "step with `./train.sh --from <step>`; start clean with `rm -rf work/.../output`.\n"
+        "Args pass straight through to `train_wakeword.py`. To\n"
         "pick up a newer bundle, unpack it from the PARENT dir (`cd ~ && tar xzf "
         "kowalski-wakeword-train.tar.gz`) so `train.sh` is overwritten in place while\n"
         "`work/` (the multi-GB downloads) is kept.\n\n"
