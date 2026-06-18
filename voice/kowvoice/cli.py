@@ -71,6 +71,10 @@ def main(argv: list[str] | None = None) -> int:
         "test", help="round-trip self-test: greet → record → STT → echo (LLM diagnosis on failure)"
     )
     sub.add_parser("wake-test", help="live wake-word score meter — say the word and tune the threshold")
+    rec = sub.add_parser("wake-record", help="record real samples of a phrase (for wake-fit) — your own voice")
+    rec.add_argument("phrase", help="wake phrase to record, e.g. kowalski")
+    rec.add_argument("--count", type=int, default=30, help="positive takes to record (default 30)")
+    rec.add_argument("--negatives", type=int, default=12, help="negative (other-speech) takes (default 12)")
 
     train = sub.add_parser("train", help="prepare a custom wake word (register a model or train)")
     train.add_argument("phrase", help="wake phrase, e.g. kowalski or hey_jarvis")
@@ -118,6 +122,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "wake-test":
         try:
             return asyncio.run(cmd_wake_test())
+        except KeyboardInterrupt:
+            print()
+            return 0
+    if args.command == "wake-record":
+        from .wake_record import run_record
+
+        try:
+            return asyncio.run(run_record(args.phrase, count=args.count,
+                                          negatives=args.negatives))
         except KeyboardInterrupt:
             print()
             return 0
