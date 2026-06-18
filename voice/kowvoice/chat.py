@@ -365,8 +365,9 @@ async def run_chat(
     else:
         print(f"{DIM}Type a message. 'quit' or Ctrl-D to exit.{RESET}")
 
-    # A 🎙 in the prompt shows the wake listener is armed (listening for the word).
-    prompt = f"{DIM}🎙{RESET} kow› " if wake is not None else "kow› "
+    # A green ● marks the wake listener as armed (listening for the word). An
+    # emoji like 🎙 doesn't render in every terminal, so use a basic symbol.
+    prompt = "\033[32m●\033[0m kow› " if wake is not None else "kow› "
     try:
         while True:
             try:
