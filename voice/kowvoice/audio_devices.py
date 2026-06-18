@@ -141,11 +141,17 @@ class OpenWakeWordListener:
                 return
 
     async def scores(self):  # pragma: no cover - needs hardware + model
-        """Yield the raw {model: score} dict per frame — for live diagnostics/tuning."""
+        """Yield ({model: score}, input_rms) per frame — for live diagnostics. The
+        RMS tells a dead mic (capture/device problem) from a quiet model (the
+        audio is there but the word doesn't match)."""
+        import numpy as np
+
         if self._oww is None:
             self._oww = self._load()
         async for pcm in self._frames():
-            yield self._oww.predict(pcm)
+            rms = (float(np.sqrt(np.mean((pcm.astype(np.float32) / 32768.0) ** 2)))
+                   if pcm.size else 0.0)
+            yield self._oww.predict(pcm), rms
 
 
 class CombinedWake:

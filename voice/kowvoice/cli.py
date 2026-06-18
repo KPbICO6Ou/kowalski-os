@@ -257,13 +257,16 @@ async def cmd_wake_test() -> int:
           "If it peaks below the threshold, lower KOW_WAKE_THRESHOLD.\n")
     peak = 0.0
     try:
-        async for scores in listener.scores():
+        async for scores, rms in listener.scores():
             score = max(scores.values()) if scores else 0.0
             peak = max(peak, score)
-            filled = int(min(1.0, score) * 30)
-            bar = "█" * filled + "·" * (30 - filled)
+            lvl = int(min(1.0, rms * 8) * 12)
+            lbar = "█" * lvl + "·" * (12 - lvl)
+            sbar = "█" * int(min(1.0, score) * 20) + "·" * (20 - int(min(1.0, score) * 20))
             hit = "  ◀ FIRE" if score >= settings.wake_threshold else ""
-            sys.stdout.write(f"\rscore {score:.3f} [{bar}] peak {peak:.3f}{hit}\033[K")
+            sys.stdout.write(
+                f"\rmic [{lbar}] {rms:.3f} │ score {score:.3f} [{sbar}] peak {peak:.3f}{hit}\033[K"
+            )
             sys.stdout.flush()
     except Exception as exc:
         import traceback
