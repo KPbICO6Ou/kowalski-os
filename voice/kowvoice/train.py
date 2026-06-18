@@ -168,9 +168,10 @@ def run_train(
         finally:
             if tmp:
                 shutil.rmtree(tmp, ignore_errors=True)
-        _merge_conf({"KOW_WAKE_MODEL": str(dest)}, config_path)
+        _merge_conf({"KOW_WAKE_MODEL": str(dest), "KOW_WAKE_WORD": slugify(phrase)}, config_path)
         on_text(f"registered wake model: {dest}\n"
-                "(KOW_WAKE_MODEL set, wake mode = both) — try: kow-voice run")
+                f"(KOW_WAKE_WORD={slugify(phrase)}, KOW_WAKE_MODEL set, wake mode = both) "
+                "— try: kow-voice run")
         return 0
 
     # custom phrase, no model yet -> training is required (on a GPU box)
