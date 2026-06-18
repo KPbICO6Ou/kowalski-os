@@ -29,6 +29,9 @@ class FakeVoiceIO:
     async def record_and_transcribe(self, on_level=None):
         return self._transcripts.pop(0) if self._transcripts else None
 
+    async def play_cue(self):
+        pass
+
     async def speak(self, text):
         self.spoken.append(text)
 

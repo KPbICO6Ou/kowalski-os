@@ -39,6 +39,9 @@ DEFAULTS = {
     "KOW_BARGE_IN": "1",
     "KOW_VOICE_INPUT_DEVICE": "",   # input device name (substring); empty = system default
     "KOW_VOICE_OUTPUT_DEVICE": "",  # TTS output device name (substring); empty = system default
+    # "mic is listening" earcon on hands-free activation (wake word / hotkey).
+    # Empty = bundled sound; a path overrides it; "off"/"none" disables it.
+    "KOW_VOICE_LISTEN_SOUND": "",
 }
 
 
@@ -87,6 +90,7 @@ class VoiceSettings:
     input_device: str = ""
     output_device: str = ""
     tts_language: str = ""
+    listen_sound: str = ""
 
     @classmethod
     def load(cls) -> "VoiceSettings":
@@ -125,6 +129,7 @@ class VoiceSettings:
             socket_path=socket_path,
             input_device=values["KOW_VOICE_INPUT_DEVICE"],
             output_device=values["KOW_VOICE_OUTPUT_DEVICE"],
+            listen_sound=values["KOW_VOICE_LISTEN_SOUND"],
             # TTS follows STT_LANGUAGE only as a convenience default; "auto" is an
             # STT-only value (TTS needs a concrete 2-letter code), so don't inherit it.
             tts_language=values["TTS_LANGUAGE"]

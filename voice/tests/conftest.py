@@ -20,6 +20,7 @@ def settings(tmp_path):
         vad_silence_ms=700,
         barge_in=True,
         socket_path=tmp_path / "kowalski.sock",
+        listen_sound="off",  # no earcon in the headless orchestrator tests
     )
 
 

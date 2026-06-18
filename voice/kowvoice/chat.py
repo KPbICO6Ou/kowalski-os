@@ -252,6 +252,12 @@ class VoiceChatIO:
         )
         return (transcript.text or "").strip() or None
 
+    async def play_cue(self) -> None:
+        """Play the 'listening' earcon on the output device (best-effort)."""
+        from .cues import play_listen_cue
+
+        await play_listen_cue(self._sink, self.settings)
+
     async def speak(self, text: str) -> None:
         text = (text or "").strip()
         if not text:
@@ -377,7 +383,8 @@ async def run_chat(
             except (EOFError, KeyboardInterrupt):
                 print()
                 break
-            if line is _TALK:  # raw-mode hotkey / wake word -> start a turn now
+            by_voice = line is _TALK  # hands-free trigger (hotkey / wake word)
+            if by_voice:
                 text = ""
             else:
                 text = (line or "").strip()
@@ -386,6 +393,8 @@ async def run_chat(
             if not text:
                 if not speak:
                     continue
+                if by_voice:
+                    await voice_io.play_cue()  # earcon: mic is now listening
                 # Inline indicator on the input line; \r + clear-to-EOL (\033[K)
                 # overwrites it in place with the result (or the cancel/error).
                 print(f"{DIM}🎤 listening… (speak; silence ends it){RESET}", end="", flush=True)
@@ -449,6 +458,7 @@ async def run_once(*, model: str = "", speak: bool = True, voice_io=None) -> int
     if voice_io is None:
         voice_io = VoiceChatIO(VoiceSettings.load())
     try:
+        await voice_io.play_cue()  # earcon: hotkey fired, mic is now listening
         print(f"{DIM}🎤 listening…{RESET}")
         try:
             text = await voice_io.record_and_transcribe(on_level=_level_meter)

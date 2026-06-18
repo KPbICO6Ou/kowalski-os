@@ -96,6 +96,9 @@ class VoiceOrchestrator:
     # -- internals ------------------------------------------------------------
 
     async def _handle_turn(self) -> None:
+        from .cues import play_listen_cue
+
+        await play_listen_cue(self.sink, self.settings)  # earcon: wake fired, listening
         while True:
             self._emit("state", state=VoiceState.LISTENING)
             utterance = await self.recorder.record_utterance()
