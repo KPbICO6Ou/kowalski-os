@@ -217,7 +217,18 @@ async def _read_or_wake(loop_ev, reader, wake):
         with contextlib.suppress(BaseException):
             await read_task
         return _TALK
-    wake_task.cancel()  # typing won (or wake errored) -> drop the listener
+    # typing won, or the wake listener errored. Surface an error (otherwise the
+    # word silently stops working — e.g. the mic device failed to open) instead of
+    # swallowing it; a clean cancellation is not an error.
+    if wake_task.done() and not wake_task.cancelled() and wake_task.exception() is not None:
+        import sys
+
+        exc = wake_task.exception()
+        if not getattr(wake, "_warned", False):  # once, so a broken mic isn't invisible
+            wake._warned = True
+            print(f"\r{DIM}wake word off — listener stopped: {type(exc).__name__}: {exc}{RESET}",
+                  file=sys.stderr, flush=True)
+    wake_task.cancel()  # drop the listener
     with contextlib.suppress(BaseException):
         await wake_task
     return await read_task  # awaits typing if wake errored first; re-raises EOF/etc.

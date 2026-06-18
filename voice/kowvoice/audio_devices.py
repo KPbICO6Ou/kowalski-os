@@ -133,11 +133,23 @@ class OpenWakeWordListener:
             stream.close()
 
     async def wait_for_wake(self) -> None:  # pragma: no cover - needs hardware + model
+        import os
+        import sys
+
+        debug = os.getenv("KOW_WAKE_DEBUG", "").strip().lower() not in ("", "0", "false", "no")
         if self._oww is None:
             self._oww = self._load()
+        last = 0.0
         async for pcm in self._frames():
             scores = self._oww.predict(pcm)
-            if scores and max(scores.values()) >= self.threshold:
+            top = max(scores.values()) if scores else 0.0
+            if debug and (top >= 0.1 and abs(top - last) >= 0.05):
+                last = top
+                print(f"[wake] score={top:.2f} (fires at {self.threshold})",
+                      file=sys.stderr, flush=True)
+            if top >= self.threshold:
+                if debug:
+                    print(f"[wake] FIRE score={top:.2f}", file=sys.stderr, flush=True)
                 return
 
     async def scores(self):  # pragma: no cover - needs hardware + model
