@@ -365,6 +365,8 @@ async def run_chat(
     else:
         print(f"{DIM}Type a message. 'quit' or Ctrl-D to exit.{RESET}")
 
+    # A 🎙 in the prompt shows the wake listener is armed (listening for the word).
+    prompt = f"{DIM}🎙{RESET} kow› " if wake is not None else "kow› "
     try:
         while True:
             try:
@@ -373,14 +375,14 @@ async def run_chat(
                     # it can be cancelled when the word fires (no orphaned worker).
                     line = await _read_or_wake(
                         asyncio.get_event_loop(),
-                        lambda stop: _raw_read("kow› ", raw_hotkey, stop=stop),
+                        lambda stop: _raw_read(prompt, raw_hotkey, stop=stop),
                         wake,
                     )
                 else:
                     # Synchronous input in the main thread: a run_in_executor()
                     # worker blocked on stdin is orphaned on Ctrl-C (SIGINT hits the
                     # main thread) and hangs the interpreter's atexit thread join.
-                    line = input_fn("kow› ")
+                    line = input_fn(prompt)
             except (EOFError, KeyboardInterrupt):
                 print()
                 break
