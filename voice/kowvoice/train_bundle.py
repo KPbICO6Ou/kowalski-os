@@ -32,7 +32,11 @@ DEFAULTS = {
     "steps": 50000,            # training iterations
     "tts_batch_size": 25,      # lower if the GPU runs out of memory
     "layer_size": 32,          # classifier hidden width
-    "target_fp_per_hour": 0.2,  # tuning target for false positives
+    # Recall knobs: the openWakeWord example (0.2 fp/hr, neg weight 1500) tunes the
+    # model to almost never fire — with limited augmentation that yields a model
+    # whose positives top out ~0.2 (never reaching threshold). Bias toward recall.
+    "target_fp_per_hour": 2.0,       # allow more false positives in exchange for recall
+    "max_negative_weight": 200,      # was 1500 (hey_echo) — stop suppressing positive scores
     "sample_rate": 16000,
 }
 
@@ -80,6 +84,7 @@ def render_config_yaml(spec: dict) -> str:
         f"tts_batch_size: {spec['tts_batch_size']}\n"
         f"layer_size: {spec['layer_size']}\n"
         f"target_false_positives_per_hour: {spec['target_fp_per_hour']}\n"
+        f"max_negative_weight: {spec['max_negative_weight']}\n"
     )
 
 
