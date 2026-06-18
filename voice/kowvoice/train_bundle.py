@@ -98,7 +98,8 @@ def render_train_sh(spec: dict) -> str:
         'WORK="${WORK:-$HERE/work}"\n'
         'echo "[kowalski-train] self-patching: piper-phonemize-fix, webrtcvad-wheels, '
         "scipy<1.17, piper-model-size, mit-rirs, config-merge, resumable-features, "
-        'generate_samples-restore, torch-weights-only, gpu-auto(legacy-cu126/cpu)"\n'
+        'generate_samples-restore, torch-weights-only, gpu-auto(legacy-cu126/cpu), '
+        'oww-feature-models"\n'
         'echo "[kowalski-train] resume a failed step with:  ./train.sh --from <step>"\n'
         'mkdir -p "$WORK" && cd "$WORK"\n'
         '[ -d openwakeword-trainer ] || git clone --depth 1 "$REPO" openwakeword-trainer\n'
@@ -240,6 +241,12 @@ def render_train_sh(spec: dict) -> str:
         '    export CUDA_VISIBLE_DEVICES=""\n'
         "  fi\n"
         "fi\n"
+        "# openWakeWord's feature models (melspectrogram.onnx / embedding_model.onnx)\n"
+        "# ship separately from the wheel and the trainer never fetches them; download\n"
+        "# into the package resources dir (idempotent) so the augment/feature step loads.\n"
+        'echo "[kowalski-train] fetching openWakeWord feature models…"\n'
+        'python -c "import openwakeword.utils as u; u.download_models()" || echo '
+        '"[kowalski-train] WARNING: openWakeWord model download failed (augment needs melspectrogram.onnx)"\n'
         f'python train_wakeword.py --config configs/{slug}.yaml "$@"\n'
         "# Pack the model (graph + its .onnx.data weights) into ONE archive so only\n"
         "# a single file travels back; kow-voice train --model unpacks it.\n"
