@@ -128,7 +128,9 @@ def run_fit(phrase: str, *, augment: int = 80, neg_count: int = 6000,
     aug = [_augment(w, user_neg, rng) for w in pos_clips for _ in range(augment)]
     pos = windows(aug)
 
-    # Negatives: real negative feature frames (sliding windows) + the user's own.
+    # Negatives = a big bank of generic real negative frames + the user's OWN
+    # other-speech as HARD negatives (augmented like the positives, weighted up, so
+    # the model learns the word rather than just the speaker's voice).
     print("fetching negative features…")
     cache = Path("~/.cache/kowalski/negative_features.npy").expanduser()
     cache.parent.mkdir(parents=True, exist_ok=True)
@@ -137,43 +139,45 @@ def run_fit(phrase: str, *, augment: int = 80, neg_count: int = 6000,
         urllib.request.urlretrieve(NEG_FEATURES_URL, cache)
     negfeat = np.load(cache, mmap_mode="r")
     starts = rng.integers(0, negfeat.shape[0] - WIN, size=neg_count)
-    neg = np.stack([np.asarray(negfeat[s:s + WIN]) for s in starts]).astype(np.float32)
-    user_neg_buf = [np.resize(n, BUF_SAMPLES).astype(np.int16) for n in user_neg]
-    neg = np.concatenate([neg, windows(user_neg_buf)]) if user_neg_buf else neg
+    generic = np.stack([np.asarray(negfeat[s:s + WIN]) for s in starts]).astype(np.float32)
+    if user_neg:
+        print(f"augmenting + embedding user (hard) negatives (x{augment})…")
+        hard = windows([_augment(n, user_neg, rng) for n in user_neg for _ in range(augment)])
+    else:
+        hard = np.zeros((0, WIN, 96), dtype=np.float32)
 
-    print(f"training on {len(pos)} positive + {len(neg)} negative windows…")
-    X = torch.tensor(np.concatenate([pos, neg]))
-    y = torch.tensor([1.0] * len(pos) + [0.0] * len(neg)).unsqueeze(1)
+    print(f"training on {len(pos)} pos + {len(generic)} generic + {len(hard)} hard negatives…")
+    X = torch.tensor(np.concatenate([pos, generic, hard]))
+    y = torch.tensor([1.0] * len(pos) + [0.0] * (len(generic) + len(hard))).unsqueeze(1)
+    pos_w = (len(generic) + len(hard)) / max(1, len(pos))
+    w = torch.tensor([pos_w] * len(pos) + [1.0] * len(generic) + [4.0] * len(hard)).unsqueeze(1)
     perm = torch.randperm(len(X))
-    X, y = X[perm], y[perm]
+    X, y, w = X[perm], y[perm], w[perm]
     nval = len(X) // 5
-    Xtr, ytr, Xval, yval = X[nval:], y[nval:], X[:nval], y[:nval]
+    Xtr, ytr, wtr, Xval, yval = X[nval:], y[nval:], w[nval:], X[:nval], y[:nval]
 
     net = _net()
-    pos_weight = torch.tensor([len(neg) / max(1, len(pos))])
     loss_fn = torch.nn.BCELoss(reduction="none")
     opt = torch.optim.Adam(net.parameters(), lr=1e-3)
     for ep in range(epochs):
         net.train()
         for i in range(0, len(Xtr), 512):
-            xb, yb = Xtr[i:i + 512], ytr[i:i + 512]
+            xb, yb, wb = Xtr[i:i + 512], ytr[i:i + 512], wtr[i:i + 512]
             opt.zero_grad()
-            out = net(xb)
-            w = torch.where(yb > 0.5, pos_weight, torch.tensor([1.0]))
-            (loss_fn(out, yb) * w).mean().backward()
+            (loss_fn(net(xb), yb) * wb).mean().backward()
             opt.step()
 
-    # Calibrate the threshold on the held-out split: highest threshold that keeps
-    # most positives while rejecting negatives.
+    # Threshold: sit just above the negatives (99th percentile) so false fires are
+    # rare; then report the recall that buys.
     net.eval()
     with torch.no_grad():
         ps = net(Xval[yval.squeeze() > 0.5]).squeeze().numpy() if (yval > 0.5).any() else np.array([0.0])
         ns = net(Xval[yval.squeeze() <= 0.5]).squeeze().numpy()
-    recall = float((ps >= 0.5).mean())
-    fp = float((ns >= 0.5).mean())
-    thr = max(0.2, min(0.6, float(np.percentile(ps, 15)) if ps.size else 0.5))
-    print(f"  val: positive recall @0.5 = {recall*100:.0f}% · negative FP @0.5 = {fp*100:.1f}% · "
-          f"pos median = {np.median(ps):.3f} · suggested threshold = {thr:.2f}")
+    thr = float(min(0.9, max(0.3, np.percentile(ns, 99) + 0.02 if ns.size else 0.5)))
+    recall = float((ps >= thr).mean())
+    fp = float((ns >= thr).mean())
+    print(f"  val @thr={thr:.2f}: recall = {recall*100:.0f}% · FP = {fp*100:.2f}% · "
+          f"pos median = {np.median(ps):.3f} · neg median = {np.median(ns):.3f}")
 
     dest = model_path_for(phrase, None)
     dest.parent.mkdir(parents=True, exist_ok=True)
