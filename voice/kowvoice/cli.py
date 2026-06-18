@@ -229,10 +229,15 @@ def _require_mic() -> str | None:
 
 
 async def cmd_wake_test() -> int:
-    """Live wake-word score meter: say the word, watch the score, tune the
-    threshold. Surfaces mic/model errors the wake loop would otherwise swallow."""
+    """Live wake-word score meter: hear a reference pronunciation, then say the
+    word and watch the score (a chime fires on each detection; Space replays the
+    prompt, q quits). Surfaces mic/model errors the wake loop would swallow."""
     import importlib.util
+    import os
+    import select
     import sys
+    import termios
+    import tty
 
     settings = VoiceSettings.load()
     err = _require_mic()
@@ -247,7 +252,7 @@ async def cmd_wake_test() -> int:
         print("no wake model configured (set KOW_WAKE_MODEL or KOW_WAKE_WORD)", file=sys.stderr)
         return 2
 
-    from .audio_devices import OpenWakeWordListener, SoundDeviceSink
+    from .audio_devices import OpenWakeWordListener, SoundDeviceSink, _quiet_alsa
     from .cues import sound
     from .tts_http import HttpTtsClient
     from .types import AudioClip
@@ -258,27 +263,51 @@ async def cmd_wake_test() -> int:
     print(f"wake-test: mic '{settings.input_device or 'system default'}', model '{model}', "
           f"threshold {settings.wake_threshold}.")
 
-    # Play a reference pronunciation (English — the model's training language) so
-    # the user can match it. Best-effort: skipped if TTS/output is unavailable.
+    # Spoken prompt synthesized once: "Скажите" (ru) + the word (en — the model's
+    # training pronunciation). Network only here; the playback is below.
     phrase = settings.wake_word or "kowalski"
+    say = ref = None
     try:
-        print(f"Скажите «{phrase}» — вот как это звучит:")
-        clip = await HttpTtsClient(settings.tts_url, settings.tts_token,
-                                   language="en").synthesize(phrase)
-        await sink.play(clip)
+        say = await HttpTtsClient(settings.tts_url, settings.tts_token,
+                                  language="ru").synthesize("Скажите")
+        ref = await HttpTtsClient(settings.tts_url, settings.tts_token,
+                                  language="en").synthesize(phrase)
     except Exception as exc:
-        print(f"(эталон не проигран: {exc})")
+        print(f"(подсказка недоступна: {exc})")
+
+    async def play_prompt() -> None:
+        try:
+            with _quiet_alsa():  # keep ALSA's device-open chatter off the display
+                for clip in (say, ref):
+                    if clip is not None:
+                        await sink.play(clip)
+        except Exception:
+            pass
 
     bloop_path = sound("bloop.wav")  # success chime on each detection
     bloop = AudioClip(audio=bloop_path.read_bytes(), format="wav") if bloop_path else None
 
-    print("Теперь повторяйте — при срабатывании прозвучит сигнал, можно тренироваться "
-          "(Ctrl-C — стоп). Если пик ниже порога — снизьте KOW_WAKE_THRESHOLD.\n")
+    print(f"Скажите «{phrase}».  Пробел — повторить подсказку, q — выход.\n")
+    await play_prompt()
+
     peak = 0.0
     hits = 0
     armed = True  # ready to count/announce the next detection
+    raw = sys.stdin.isatty()
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd) if raw else None
+    if raw:
+        tty.setcbreak(fd)
     try:
         async for scores, rms in listener.scores():
+            if raw and select.select([fd], [], [], 0)[0]:
+                ch = os.read(fd, 1)
+                if ch in (b"q", b"\x03"):
+                    break
+                if ch == b" ":
+                    sys.stdout.write("\r\033[K")
+                    sys.stdout.flush()
+                    await play_prompt()
             score = max(scores.values()) if scores else 0.0
             peak = max(peak, score)
             if score >= settings.wake_threshold:
@@ -293,8 +322,9 @@ async def cmd_wake_test() -> int:
                 armed = True  # re-arm once the score falls back down
             lvl = int(min(1.0, rms * 8) * 12)
             lbar = "█" * lvl + "·" * (12 - lvl)
-            sbar = "█" * int(min(1.0, score) * 20) + "·" * (20 - int(min(1.0, score) * 20))
-            hit = f"  ◀ FIRE  ✓{hits}" if score >= settings.wake_threshold else (
+            sn = int(min(1.0, score) * 20)
+            sbar = "█" * sn + "·" * (20 - sn)
+            hit = f"  ◀ FIRE ✓{hits}" if score >= settings.wake_threshold else (
                 f"  (✓{hits})" if hits else "")
             sys.stdout.write(
                 f"\rmic [{lbar}] {rms:.3f} │ score {score:.3f} [{sbar}] peak {peak:.3f}{hit}\033[K"
@@ -306,6 +336,9 @@ async def cmd_wake_test() -> int:
         print(f"\nwake listener error: {type(exc).__name__}: {exc}", file=sys.stderr)
         print(traceback.format_exc(), file=sys.stderr)
         return 1
+    finally:
+        if raw:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
     return 0
 
 
