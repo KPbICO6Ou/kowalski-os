@@ -47,6 +47,59 @@ def _level_meter(rms: float, state: str) -> None:
     sys.stdout.flush()
 
 
+class _Work:
+    """A live progress line for a slow voice op (STT/TTS): cycles 1–3 dots
+    ('TTS .' / '..' / '...') so the user sees something is happening, then rewrites
+    the line as a summary 'TTS 123 chars (1.234s)'. The caller sets `.chars`; the
+    elapsed time is measured around the `async with`. Animation is tty-only; the
+    summary always prints (unless the body raised)."""
+
+    def __init__(self, label: str, *, period: float = 0.35) -> None:
+        self.label = label
+        self.period = period
+        self.chars = 0
+        self._task = None
+        self._t0 = 0.0
+
+    async def __aenter__(self) -> "_Work":
+        import sys
+        import time
+
+        self._t0 = time.monotonic()
+        if sys.stdout.isatty():
+            self._task = asyncio.ensure_future(self._spin())
+        return self
+
+    async def _spin(self) -> None:
+        import sys
+
+        i = 0
+        try:
+            while True:
+                i = i % 3 + 1
+                sys.stdout.write(f"\r{DIM}{self.label} {'.' * i}{RESET}\033[K")
+                sys.stdout.flush()
+                await asyncio.sleep(self.period)
+        except asyncio.CancelledError:
+            pass
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:
+        import contextlib
+        import sys
+        import time
+
+        if self._task is not None:
+            self._task.cancel()
+            with contextlib.suppress(BaseException):
+                await self._task
+        if exc_type is None:
+            dt = time.monotonic() - self._t0
+            tty = sys.stdout.isatty()
+            head, tail = ("\r", "\033[K") if tty else ("", "")
+            print(f"{head}{DIM}{self.label} {self.chars} chars ({dt:.3f}s){RESET}{tail}")
+        return False
+
+
 _TALK = object()  # sentinel: the raw reader returns this when the hotkey is pressed
 _STOP = object()  # sentinel: the raw reader was cancelled (stop event set, e.g. wake fired)
 
@@ -248,21 +301,29 @@ class VoiceChatIO:
 
         self.settings = settings
         self._recorder = EnergyVadRecorder(
-            settings.sample_rate, settings.vad_silence_ms, device=settings.input_device
+            settings.sample_rate, settings.vad_silence_ms, device=settings.input_device,
+            onset_timeout=settings.no_speech_ms / 1000.0,
         )
         self._stt = HttpSttClient(settings.stt_url, settings.stt_token)
         self._tts = HttpTtsClient(settings.tts_url, settings.tts_token,
                                   language=settings.tts_language)
         self._sink = SoundDeviceSink(device=settings.output_device)
 
-    async def record_and_transcribe(self, on_level=None) -> str | None:
-        utterance = await self._recorder.record_utterance(on_level=on_level)
+    async def record(self, on_level=None):
+        """Capture one utterance from the mic (ends on trailing silence)."""
+        return await self._recorder.record_utterance(on_level=on_level)
+
+    async def transcribe(self, utterance) -> str | None:
+        """Send a recorded utterance to STT; returns the text (or None if empty)."""
         if utterance is None or utterance.is_empty:
             return None
         transcript = await self._stt.transcribe(
             utterance, language=self.settings.stt_language or None
         )
         return (transcript.text or "").strip() or None
+
+    async def record_and_transcribe(self, on_level=None) -> str | None:
+        return await self.transcribe(await self.record(on_level=on_level))
 
     async def play_cue(self) -> None:
         """Play the 'listening' earcon on the output device (best-effort)."""
@@ -414,7 +475,7 @@ async def run_chat(
                 # overwrites it in place with the result (or the cancel/error).
                 print(f"{DIM}🎤 listening… (speak; silence ends it){RESET}", end="", flush=True)
                 try:
-                    text = await voice_io.record_and_transcribe(on_level=_level_meter)
+                    utterance = await voice_io.record(on_level=_level_meter)
                 except (KeyboardInterrupt, asyncio.CancelledError):
                     # Ctrl-C while recording cancels just this turn (the mic stream
                     # tears down) — back to the prompt instead of crashing out.
@@ -423,14 +484,26 @@ async def run_chat(
                 except Exception as exc:
                     print(f"\r{DIM}(voice input failed: {exc}){RESET}\033[K")
                     continue
-                if not text:
+                if utterance is None or utterance.is_empty:
                     print(f"\r{DIM}(no speech){RESET}\033[K")
                     continue
-                print(f"\r{DIM}you (voice):{RESET} {text}\033[K")
+                try:
+                    async with _Work("STT") as w:  # dots while the network STT runs
+                        text = await voice_io.transcribe(utterance)
+                        w.chars = len(text or "")
+                except Exception as exc:
+                    print(f"\r{DIM}(transcription failed: {exc}){RESET}\033[K")
+                    continue
+                if not text:
+                    print(f"{DIM}(no speech){RESET}")
+                    continue
+                print(f"{DIM}you (voice):{RESET} {text}")
             answer = await _drive_turn(loop, text, conversation_id, conversations, config)
             if speak and answer:
                 try:
-                    await voice_io.speak(answer)
+                    async with _Work("TTS") as w:  # dots while synth + playback run
+                        w.chars = len(answer)
+                        await voice_io.speak(answer)
                 except Exception as exc:
                     print(f"{DIM}(speech output failed: {exc}){RESET}")
     finally:

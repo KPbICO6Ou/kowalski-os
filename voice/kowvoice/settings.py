@@ -36,6 +36,9 @@ DEFAULTS = {
     "KOW_WAKE_THRESHOLD": "0.5",
     "KOW_VOICE_SAMPLE_RATE": "16000",
     "KOW_VAD_SILENCE_MS": "700",
+    # Give up and close the mic if no speech starts within this many ms (so a
+    # hands-free turn that catches silence doesn't listen forever).
+    "KOW_VOICE_NOSPEECH_MS": "3000",
     "KOW_BARGE_IN": "1",
     "KOW_VOICE_INPUT_DEVICE": "",   # input device name (substring); empty = system default
     "KOW_VOICE_OUTPUT_DEVICE": "",  # TTS output device name (substring); empty = system default
@@ -91,6 +94,7 @@ class VoiceSettings:
     output_device: str = ""
     tts_language: str = ""
     listen_sound: str = ""
+    no_speech_ms: int = 3000
 
     @classmethod
     def load(cls) -> "VoiceSettings":
@@ -125,6 +129,7 @@ class VoiceSettings:
             wake_threshold=float(values["KOW_WAKE_THRESHOLD"]),
             sample_rate=int(values["KOW_VOICE_SAMPLE_RATE"]),
             vad_silence_ms=int(values["KOW_VAD_SILENCE_MS"]),
+            no_speech_ms=int(values["KOW_VOICE_NOSPEECH_MS"]),
             barge_in=values["KOW_BARGE_IN"].lower() in ("1", "true", "yes"),
             socket_path=socket_path,
             input_device=values["KOW_VOICE_INPUT_DEVICE"],

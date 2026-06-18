@@ -21,13 +21,25 @@ def _scripted_input(lines):
     return fake
 
 
+class _FakeUtt:
+    is_empty = False
+
+
 class FakeVoiceIO:
     def __init__(self, transcripts=None):
         self._transcripts = list(transcripts or [])
         self.spoken = []
+        self._pending = None
+
+    async def record(self, on_level=None):
+        self._pending = self._transcripts.pop(0) if self._transcripts else None
+        return _FakeUtt() if self._pending else None
+
+    async def transcribe(self, utterance):
+        return self._pending
 
     async def record_and_transcribe(self, on_level=None):
-        return self._transcripts.pop(0) if self._transcripts else None
+        return await self.transcribe(await self.record(on_level=on_level))
 
     async def play_cue(self):
         pass

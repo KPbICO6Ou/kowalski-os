@@ -219,13 +219,14 @@ class EnergyVadRecorder:
 
     def __init__(
         self, sample_rate: int = 16000, silence_ms: int = 700, threshold: float = 0.02,
-        device: str = "", max_seconds: float = 15.0,
+        device: str = "", max_seconds: float = 15.0, onset_timeout: float = 3.0,
     ) -> None:
         self.sample_rate = sample_rate
         self.silence_ms = silence_ms
         self.threshold = threshold
         self.device = device or None  # None = system default input
         self.max_seconds = max_seconds  # hard cap so a silent/wrong device can't hang
+        self.onset_timeout = onset_timeout  # give up if no speech starts in this long
 
     async def record_utterance(self, on_level=None) -> Utterance | None:  # pragma: no cover
         import numpy as np
@@ -257,6 +258,7 @@ class EnergyVadRecorder:
                 stream.start()
 
         max_blocks = max(1, int(self.max_seconds * capture_sr / block))
+        onset_blocks = max(1, int(self.onset_timeout * capture_sr / block))
         calib_blocks = 8                  # ~240 ms to measure the noise floor
         noise: list[float] = []
         threshold = self.threshold        # refined from the noise floor below
@@ -272,6 +274,11 @@ class EnergyVadRecorder:
                     noise.append(rms)
                     if n == calib_blocks - 1:  # adapt to the mic: floor + noise-relative
                         threshold = max(sum(noise) / len(noise) * 3.0, 0.008)
+
+                # Nobody started talking within onset_timeout -> stop, don't camp on
+                # the mic for the full max_seconds.
+                if not heard_speech and n >= onset_blocks:
+                    break
 
                 if rms >= threshold:
                     heard_speech = True
