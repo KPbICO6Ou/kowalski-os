@@ -253,8 +253,23 @@ async def cmd_wake_test() -> int:
                                     device=settings.input_device)
     print(f"wake-test: mic '{settings.input_device or 'system default'}', model '{model}', "
           f"threshold {settings.wake_threshold}.")
-    print("Say the wake word; watch the score (Ctrl-C to stop). "
-          "If it peaks below the threshold, lower KOW_WAKE_THRESHOLD.\n")
+
+    # Play a reference pronunciation (English — the model's training language) so
+    # the user can match it. Best-effort: skipped if TTS/output is unavailable.
+    phrase = settings.wake_word or "kowalski"
+    try:
+        from .audio_devices import SoundDeviceSink
+        from .tts_http import HttpTtsClient
+
+        print(f"Скажите «{phrase}» — вот как это звучит:")
+        clip = await HttpTtsClient(settings.tts_url, settings.tts_token,
+                                   language="en").synthesize(phrase)
+        await SoundDeviceSink(device=settings.output_device).play(clip)
+    except Exception as exc:
+        print(f"(эталон не проигран: {exc})")
+
+    print("Теперь повторите; следите за score (Ctrl-C — стоп). "
+          "Если пик ниже порога — снизьте KOW_WAKE_THRESHOLD.\n")
     peak = 0.0
     try:
         async for scores, rms in listener.scores():
