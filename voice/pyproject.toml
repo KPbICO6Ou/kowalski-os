@@ -19,6 +19,9 @@ dependencies = [
 # its tflite-runtime pin is uninstallable (no wheel), so install it separately
 # with `pip install --no-deps openwakeword` (it runs on onnxruntime). See README.
 mic = ["sounddevice>=0.4", "numpy>=1.26", "onnxruntime>=1.17", "scikit-learn", "scipy", "tqdm", "requests"]
+# `kow-voice wake-fit` (train a personal wake model) also needs torch + onnx;
+# torch is large so it stays opt-in here rather than in `mic`.
+wake-fit = ["torch>=2.0", "onnx>=1.15"]
 
 [project.scripts]
 kow-voice = "kowvoice.cli:main"

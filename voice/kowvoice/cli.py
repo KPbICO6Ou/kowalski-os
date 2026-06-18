@@ -76,6 +76,10 @@ def main(argv: list[str] | None = None) -> int:
     rec.add_argument("phrase", help="wake phrase to record, e.g. kowalski")
     rec.add_argument("--count", type=int, default=30, help="positive takes to record (default 30)")
     rec.add_argument("--negatives", type=int, default=12, help="negative (other-speech) takes (default 12)")
+    fit = sub.add_parser("wake-fit", help="train a personal wake model from recorded samples (CPU, local)")
+    fit.add_argument("phrase", help="wake phrase recorded with wake-record, e.g. kowalski")
+    fit.add_argument("--augment", type=int, default=80, help="augmented copies per positive (default 80)")
+    fit.add_argument("--epochs", type=int, default=150, help="training epochs (default 150)")
 
     train = sub.add_parser("train", help="prepare a custom wake word (register a model or train)")
     train.add_argument("phrase", help="wake phrase, e.g. kowalski or hey_jarvis")
@@ -143,6 +147,10 @@ def main(argv: list[str] | None = None) -> int:
         except KeyboardInterrupt:
             print()
             return 0
+    if args.command == "wake-fit":
+        from .wake_fit import run_fit
+
+        return run_fit(args.phrase, augment=args.augment, epochs=args.epochs)
     if args.command == "train":
         from .train import run_train
 
