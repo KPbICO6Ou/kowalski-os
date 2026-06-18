@@ -260,8 +260,13 @@ async def cmd_wake_test() -> int:
     listener = OpenWakeWordListener(model, settings.sample_rate, settings.wake_threshold,
                                     device=settings.input_device)
     sink = SoundDeviceSink(device=settings.output_device)
-    print(f"wake-test: mic '{settings.input_device or 'system default'}', model '{model}', "
-          f"threshold {settings.wake_threshold}.")
+
+    def pr(s: str = "") -> None:  # col-0 line, robust to a terminal left in raw mode
+        sys.stdout.write("\r" + s + "\r\n")
+        sys.stdout.flush()
+
+    pr(f"wake-test: mic '{settings.input_device or 'system default'}', model '{model}', "
+       f"threshold {settings.wake_threshold}.")
 
     # Spoken prompt synthesized once: "Скажите" (ru) + the word (en — the model's
     # training pronunciation). Network only here; the playback is below.
@@ -273,7 +278,7 @@ async def cmd_wake_test() -> int:
         ref = await HttpTtsClient(settings.tts_url, settings.tts_token,
                                   language="en").synthesize(phrase)
     except Exception as exc:
-        print(f"(подсказка недоступна: {exc})")
+        pr(f"(подсказка недоступна: {exc})")
 
     async def play(*clips) -> None:
         try:
@@ -287,7 +292,8 @@ async def cmd_wake_test() -> int:
     bloop_path = sound("bloop.wav")  # success chime on each detection
     bloop = AudioClip(audio=bloop_path.read_bytes(), format="wav") if bloop_path else None
 
-    print(f"Скажите «{phrase}».  Пробел — повторить «{phrase}», q — выход.\n")
+    pr(f"Скажите «{phrase}».  Пробел — повторить «{phrase}», q — выход.")
+    pr()
     await play(say, ref)  # full prompt once: "Скажите" + the word
 
     peak = 0.0
