@@ -21,18 +21,18 @@ def samples_dir(slug: str) -> Path:
 def validate_take(utt) -> tuple[bool, str]:
     """A take is usable if it caught speech of a word's length at an audible level."""
     if utt is None or utt.is_empty:
-        return False, "тишина / не расслышал"
+        return False, "no speech"
     import numpy as np
 
     pcm = np.frombuffer(utt.pcm, dtype=np.int16).astype(np.float32) / 32768.0
     dur = pcm.size / utt.sample_rate if utt.sample_rate else 0.0
     rms = float(np.sqrt(np.mean(pcm * pcm))) if pcm.size else 0.0
     if dur < 0.3:
-        return False, f"слишком коротко ({dur:.2f}s)"
+        return False, f"too short ({dur:.2f}s)"
     if dur > 2.5:
-        return False, f"слишком длинно ({dur:.2f}s)"
+        return False, f"too long ({dur:.2f}s)"
     if rms < 0.012:
-        return False, f"слишком тихо (rms {rms:.3f})"
+        return False, f"too quiet (rms {rms:.3f})"
     return True, f"{dur:.2f}s · rms {rms:.3f}"
 
 
@@ -42,7 +42,7 @@ def _meter(rms: float, state: str) -> None:
         return
     filled = int(min(1.0, rms * 12) * 16)
     bar = "█" * filled + "·" * (16 - filled)
-    label = {"waiting": "говорите…", "speaking": "слышу…", "ending": "…"}.get(state, "")
+    label = {"waiting": "speak…", "speaking": "hearing…", "ending": "…"}.get(state, "")
     sys.stdout.write(f"\r{DIM}  🎤 [{bar}] {label}{RESET}\033[K")
     sys.stdout.flush()
 
@@ -88,6 +88,7 @@ async def run_record(phrase: str, *, count: int = 30, negatives: int = 12,
             pass
 
     async def announce(text: str, lang: str = "ru") -> None:
+        """Spoken (TTS) prompt — kept in the user's language; console text is English."""
         try:
             await play(await HttpTtsClient(settings.tts_url, settings.tts_token,
                                            language=lang).synthesize(text))
@@ -108,35 +109,35 @@ async def run_record(phrase: str, *, count: int = 30, negatives: int = 12,
             pr(f"  ✓ {info}")
             return True
         await play(nope)
-        pr(f"  ✗ {info} — ещё раз")
+        pr(f"  ✗ {info} — again")
         return False
 
-    pr(f"Запись слова «{phrase}» для обучения — {count} чётких произнесений.")
-    pr("После каждого сигнала произнесите слово, как обычно. Ctrl-C — стоп.")
-    await announce(f"Запишем слово {phrase}. После сигнала произнесите его.")
+    pr(f"Recording '{phrase}' for training — {count} clear takes.")
+    pr("Say the word after each chime, the way you normally would. Ctrl-C to stop.")
+    await announce(f"Запишем слово {phrase}. После каждого сигнала произнесите его.")
 
     got = 0
     try:
         while got < count:
-            if await capture(f"[{got + 1}/{count}] Скажите «{phrase}» после сигнала:",
+            if await capture(f"[{got + 1}/{count}] say '{phrase}' after the chime:",
                              pos_dir, got):
                 got += 1
 
         pr("")
-        pr(f"Теперь фон — говорите ДРУГИЕ слова/фразы (НЕ «{phrase}»).")
+        pr(f"Now negatives — say OTHER words/phrases (NOT '{phrase}').")
         await announce(f"Теперь говорите другие фразы, кроме {phrase}.")
         neg = 0
         while neg < negatives:
-            if await capture(f"[фон {neg + 1}/{negatives}] любая другая фраза:",
+            if await capture(f"[neg {neg + 1}/{negatives}] any other phrase:",
                              neg_dir, neg):
                 neg += 1
     except (KeyboardInterrupt, EOFError):
         pr("")
-        pr("(прервано)")
+        pr("(interrupted)")
 
     npos = len(list(pos_dir.glob("*.wav")))
     nneg = len(list(neg_dir.glob("*.wav")))
     pr("")
-    pr(f"Готово: {npos} позитивов, {nneg} негативов → {samples_dir(slug)}")
-    pr(f"Дальше: kow-voice wake-fit {phrase}")
+    pr(f"Done: {npos} positives, {nneg} negatives -> {samples_dir(slug)}")
+    pr(f"Next: kow-voice wake-fit {phrase}")
     return 0

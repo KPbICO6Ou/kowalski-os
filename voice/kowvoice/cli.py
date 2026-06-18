@@ -300,7 +300,7 @@ async def cmd_wake_test() -> int:
         ref = await HttpTtsClient(settings.tts_url, settings.tts_token,
                                   language="en").synthesize(phrase)
     except Exception as exc:
-        pr(f"(подсказка недоступна: {exc})")
+        pr(f"(reference unavailable: {exc})")
 
     async def play(*clips) -> None:
         try:
@@ -314,9 +314,9 @@ async def cmd_wake_test() -> int:
     bloop_path = sound("bloop.wav")  # success chime on each detection
     bloop = AudioClip(audio=bloop_path.read_bytes(), format="wav") if bloop_path else None
 
-    pr(f"Скажите «{phrase}».  Пробел — повторить «{phrase}», q — выход.")
+    pr(f"Say '{phrase}'.  Space — replay '{phrase}', q — quit.")
     pr()
-    await play(say, ref)  # full prompt once: "Скажите" + the word
+    await play(say, ref)  # full spoken prompt once: "Скажите" + the word
 
     peak = 0.0
     hits = 0

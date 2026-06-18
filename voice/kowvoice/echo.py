@@ -15,7 +15,7 @@ def _meter(rms: float, state: str) -> None:
         return
     filled = int(min(1.0, rms * 12) * 16)
     bar = "█" * filled + "·" * (16 - filled)
-    label = {"waiting": "говорите…", "speaking": "слышу…", "ending": "…"}.get(state, "")
+    label = {"waiting": "speak…", "speaking": "hearing…", "ending": "…"}.get(state, "")
     sys.stdout.write(f"\r{DIM}  🎤 [{bar}] {label}{RESET}\033[K")
     sys.stdout.flush()
 
@@ -44,24 +44,24 @@ async def run_echo(settings=None) -> int:
             with _quiet_alsa():
                 await sink.play(audio)
         except Exception as exc:
-            pr(f"  (воспроизведение не удалось: {exc})")
+            pr(f"  (playback failed: {exc})")
 
-    pr("Эхо-тест мик + динамик: скажите что-нибудь — повторю за вами. Ctrl-C — стоп.")
-    pr(f"  мик: {settings.input_device or 'system default'} · "
-       f"динамик: {settings.output_device or 'system default'}")
+    pr("Echo test (mic + speaker): say something and hear it back. Ctrl-C to stop.")
+    pr(f"  mic: {settings.input_device or 'system default'} · "
+       f"speaker: {settings.output_device or 'system default'}")
     while True:
         await play(cue)  # "speak now"
         try:
             utt = await recorder.record_utterance(on_level=_meter)
         except Exception as exc:
-            pr(f"  (запись не удалась: {exc})")
+            pr(f"  (recording failed: {exc})")
             return 1
         if sys.stdout.isatty():
             sys.stdout.write("\r\033[K")
             sys.stdout.flush()
         if utt is None or utt.is_empty:
-            pr("  (тишина — говорите после сигнала)")
+            pr("  (silence — speak after the cue)")
             continue
         dur = len(utt.pcm) / 2 / utt.sample_rate if utt.sample_rate else 0.0
-        pr(f"  ↺ повторяю ({dur:.2f}s)…")
+        pr(f"  ↺ playing back ({dur:.2f}s)…")
         await play(AudioClip(audio=utt.pcm, format="pcm", sample_rate=utt.sample_rate))
