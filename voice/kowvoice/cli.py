@@ -66,6 +66,7 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("mic", help="pick the input microphone (live level meter + echo test)")
     sub.add_parser("speaker", help="pick the TTS output device (with a test tone)")
+    sub.add_parser("echo", help="mic + speaker round-trip: say something, hear it back")
     sub.add_parser("check", help="probe STT/TTS/kow-core connectivity")
     sub.add_parser(
         "test", help="round-trip self-test: greet → record → STT → echo (LLM diagnosis on failure)"
@@ -113,6 +114,14 @@ def main(argv: list[str] | None = None) -> int:
         from .speaker_select import run as run_spk
 
         return run_spk()
+    if args.command == "echo":
+        from .echo import run_echo
+
+        try:
+            return asyncio.run(run_echo())
+        except KeyboardInterrupt:
+            print()
+            return 0
     if args.command == "check":
         return asyncio.run(cmd_check())
     if args.command == "test":
