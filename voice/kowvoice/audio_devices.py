@@ -58,6 +58,68 @@ def _resolve_device(device, want_output: bool):
     return None  # not found -> system default
 
 
+def _open_capture(device, target_sr: int, block_ms: int):
+    """Open a callback-mode int16 mono input stream; return
+    (stream, frames_queue, capture_sr, block_samples).
+
+    Callback mode — PortAudio owns the capture thread and delivers frames via a
+    queue — instead of a blocking `stream.read()` in an executor thread. That read
+    could still be running in its thread when teardown called `stream.close()` from
+    another thread on Ctrl-C, corrupting ALSA's mmap state and segfaulting (the
+    `alsa_snd_pcm_mmap_begin ... failed` crash). Here `close()` just joins
+    PortAudio's own thread and nothing races it.
+
+    Prefers `target_sr`; a raw hw device that rejects it falls back to the device's
+    native rate (the caller resamples)."""
+    import queue
+
+    import sounddevice as sd
+
+    frames: queue.Queue = queue.Queue(maxsize=64)
+
+    def callback(indata, count, time_info, status):  # PortAudio thread
+        try:
+            frames.put_nowait(bytes(indata))
+        except queue.Full:
+            pass  # drop on overflow rather than block the audio callback
+
+    def _start(sr: int):
+        block = max(1, int(sr * block_ms / 1000))
+        stream = sd.RawInputStream(samplerate=sr, channels=1, dtype="int16",
+                                   blocksize=block, device=device, callback=callback)
+        stream.start()
+        return stream, block
+
+    with _quiet_alsa():  # a hw device rejecting target_sr is expected, not noise
+        try:
+            stream, block = _start(target_sr)
+            return stream, frames, target_sr, block
+        except Exception:
+            qd = device if device is not None else sd.default.device[0]
+            native = int(sd.query_devices(qd)["default_samplerate"])
+            stream, block = _start(native)
+            return stream, frames, native, block
+
+
+async def _next_frame(loop, frames):
+    """Await the next captured chunk (bytes), or None if the mic stalled for ~1 s
+    (so a dead device can't block forever and cancellation stays responsive)."""
+    import queue
+
+    try:
+        return await loop.run_in_executor(None, frames.get, True, 1.0)
+    except queue.Empty:
+        return None
+
+
+def _close_capture(stream) -> None:
+    """Tear down a capture stream, swallowing teardown errors."""
+    with contextlib.suppress(Exception):
+        stream.stop()
+    with contextlib.suppress(Exception):
+        stream.close()
+
+
 class PushToTalkWake:
     """Dependency-free wake: press Enter to start a turn. Works on any box and
     is the fallback half of the `both` wake mode."""
@@ -101,36 +163,23 @@ class OpenWakeWordListener:
         Opens at 16 kHz (what openWakeWord wants); a raw hw device that rejects it
         falls back to the native rate + linear resample, like EnergyVadRecorder."""
         import numpy as np
-        import sounddevice as sd
 
         dev = _resolve_device(self.device, want_output=False)
-        target, frame16 = 16000, 1280
-        capture_sr, block = target, frame16
-        with _quiet_alsa():  # 16 kHz failing on a hw device is expected, not noise
-            try:
-                stream = sd.RawInputStream(samplerate=target, channels=1, dtype="int16",
-                                           blocksize=frame16, device=dev)
-                stream.start()
-            except Exception:
-                qd = dev if dev is not None else sd.default.device[0]
-                capture_sr = int(sd.query_devices(qd)["default_samplerate"])
-                block = max(1, int(capture_sr * 0.08))  # 80 ms at the native rate
-                stream = sd.RawInputStream(samplerate=capture_sr, channels=1, dtype="int16",
-                                           blocksize=block, device=dev)
-                stream.start()
+        stream, frames, capture_sr, _ = _open_capture(dev, 16000, 80)  # ~80 ms frames
         loop = asyncio.get_running_loop()
         try:
             while True:
-                data, _ = await loop.run_in_executor(None, stream.read, block)
-                pcm = np.frombuffer(bytes(data), dtype=np.int16)
-                if capture_sr != target and pcm.size:
-                    n_out = int(pcm.size * target / capture_sr)
+                data = await _next_frame(loop, frames)
+                if data is None:
+                    continue
+                pcm = np.frombuffer(data, dtype=np.int16)
+                if capture_sr != 16000 and pcm.size:
+                    n_out = int(pcm.size * 16000 / capture_sr)
                     pos = np.linspace(0, pcm.size - 1, n_out)
                     pcm = np.interp(pos, np.arange(pcm.size), pcm).astype(np.int16)
                 yield pcm
         finally:
-            stream.stop()
-            stream.close()
+            _close_capture(stream)
 
     async def wait_for_wake(self) -> None:  # pragma: no cover - needs hardware + model
         import os
@@ -232,7 +281,6 @@ class EnergyVadRecorder:
 
     async def record_utterance(self, on_level=None) -> Utterance | None:  # pragma: no cover
         import numpy as np
-        import sounddevice as sd
 
         # Resolve a saved device name to an index (opening by full name is flaky).
         dev = _resolve_device(self.device, want_output=False)
@@ -243,22 +291,10 @@ class EnergyVadRecorder:
         speech_blocks = 0  # how many blocks actually crossed the speech threshold
         loop = asyncio.get_running_loop()
 
-        # Prefer 16 kHz (what STT wants); raw ALSA hw devices reject it, so fall
-        # back to the device's native rate and resample the PCM afterwards.
-        capture_sr = self.sample_rate
-        block = int(capture_sr * 0.03)  # 30 ms blocks
-        with _quiet_alsa():  # the 16 kHz probe failing on a hw device is expected, not noise
-            try:
-                stream = sd.RawInputStream(samplerate=capture_sr, channels=1,
-                                           dtype="int16", blocksize=block, device=dev)
-                stream.start()
-            except Exception:
-                qd = dev if dev is not None else sd.default.device[0]
-                capture_sr = int(sd.query_devices(qd)["default_samplerate"])
-                block = int(capture_sr * 0.03)
-                stream = sd.RawInputStream(samplerate=capture_sr, channels=1,
-                                           dtype="int16", blocksize=block, device=dev)
-                stream.start()
+        # Callback-mode capture (safe teardown on Ctrl-C). Prefer 16 kHz (what STT
+        # wants); a raw hw device that rejects it falls back to its native rate,
+        # resampled afterwards. 30 ms blocks for VAD granularity.
+        stream, frames, capture_sr, block = _open_capture(dev, self.sample_rate, 30)
 
         max_blocks = max(1, int(self.max_seconds * capture_sr / block))
         onset_blocks = max(1, int(self.onset_timeout * capture_sr / block))
@@ -267,11 +303,13 @@ class EnergyVadRecorder:
         noise: list[float] = []
         threshold = self.threshold        # refined from the noise floor below
         try:
-            for n in range(max_blocks):
-                data, _ = await loop.run_in_executor(None, stream.read, block)
-                pcm = bytes(data)
-                captured.append(pcm)
-                samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+            n = 0
+            while n < max_blocks:
+                data = await _next_frame(loop, frames)
+                if data is None:
+                    continue  # mic stall (~1 s) — keep waiting, don't count it
+                captured.append(data)
+                samples = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
                 rms = float(np.sqrt(np.mean(samples * samples))) if samples.size else 0.0
 
                 if not heard_speech and n < calib_blocks:
@@ -295,9 +333,9 @@ class EnergyVadRecorder:
                     on_level(rms, state)
                 if heard_speech and trailing_silence >= silence_blocks:
                     break
+                n += 1
         finally:
-            stream.stop()
-            stream.close()
+            _close_capture(stream)
 
         # Reject silence and brief blips (a click/breath that tripped the threshold
         # for a moment): Whisper hallucinates whole sentences from such clips.
