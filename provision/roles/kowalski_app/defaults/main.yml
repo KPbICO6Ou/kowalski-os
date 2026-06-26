@@ -30,5 +30,6 @@ kow_autoupdate: false   # install a user timer that pulls origin into the instal
 kow_autoupdate_interval: "2min"   # how often the auto-update timer polls origin
 kow_voice_mic: false    # install the mic + wake-word stack (sounddevice, onnx, openWakeWord)
 kow_voice_train: false  # also install torch + torchaudio for `kow-voice train` (wake-word training)
+kow_voice_chat_autostart: false  # autostart a voice chat terminal that raises on the wake word
 kow_voice_venv: "{{ kow_prefix }}/.venv"   # which venv receives the voice / mic / train stack
 kow_torch_index: "https://download.pytorch.org/whl/cpu"  # CPU torch wheels; for a CUDA box set a cuXXX index

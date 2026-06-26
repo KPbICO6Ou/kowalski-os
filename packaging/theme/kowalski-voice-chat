@@ -1,0 +1,14 @@
+#!/bin/sh
+# Launch the always-on Kowalski voice chat in a terminal, started minimized. The
+# chat holds the mic and listens for the wake word; on the wake word it raises its
+# own terminal to the foreground (KOW_VOICE_RAISE_WINDOW). Picks an available
+# terminal emulator, falling back to a plain console.
+set -e
+
+if command -v xfce4-terminal >/dev/null 2>&1; then
+    exec xfce4-terminal --minimize --title Kowalski -x kow chat --voice --resume
+elif command -v x-terminal-emulator >/dev/null 2>&1; then
+    exec x-terminal-emulator -T Kowalski -e kow chat --voice --resume
+else
+    exec kow chat --voice --resume
+fi

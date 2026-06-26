@@ -45,6 +45,9 @@ DEFAULTS = {
     # "mic is listening" earcon on hands-free activation (wake word / hotkey).
     # Empty = bundled sound; a path overrides it; "off"/"none" disables it.
     "KOW_VOICE_LISTEN_SOUND": "",
+    # On a hands-free (wake/hotkey) turn, raise the terminal hosting `kow chat` to
+    # the foreground (best-effort X11; needs wmctrl/xdotool). "0" disables it.
+    "KOW_VOICE_RAISE_WINDOW": "1",
 }
 
 
@@ -95,6 +98,7 @@ class VoiceSettings:
     tts_language: str = ""
     listen_sound: str = ""
     no_speech_ms: int = 3000
+    raise_window: bool = True
 
     @classmethod
     def load(cls) -> "VoiceSettings":
@@ -130,6 +134,7 @@ class VoiceSettings:
             sample_rate=int(values["KOW_VOICE_SAMPLE_RATE"]),
             vad_silence_ms=int(values["KOW_VAD_SILENCE_MS"]),
             no_speech_ms=int(values["KOW_VOICE_NOSPEECH_MS"]),
+            raise_window=values["KOW_VOICE_RAISE_WINDOW"].lower() in ("1", "true", "yes", "on"),
             barge_in=values["KOW_BARGE_IN"].lower() in ("1", "true", "yes"),
             socket_path=socket_path,
             input_device=values["KOW_VOICE_INPUT_DEVICE"],

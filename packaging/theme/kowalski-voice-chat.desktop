@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Kowalski Voice Chat
+Comment=Always-on voice chat; raises to the foreground on the wake word
+Exec=kowalski-voice-chat
+Icon=utilities-terminal
+Terminal=false
+X-XFCE-Autostart-enabled=true
+OnlyShowIn=XFCE;

@@ -334,3 +334,22 @@
     dest: "{{ kow_home }}/.config/autostart/kowalski-onboarding.desktop"
     mode: "0644"
   when: kow_theme | bool
+
+- name: Install the voice-chat launcher
+  become: true
+  ansible.builtin.copy:
+    remote_src: true
+    src: "{{ kow_prefix }}/packaging/theme/kowalski-voice-chat"
+    dest: /usr/local/bin/kowalski-voice-chat
+    mode: "0755"
+  when: kow_voice_chat_autostart | bool
+
+- name: Install the voice-chat autostart entry (raises on the wake word)
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.copy:
+    remote_src: true
+    src: "{{ kow_prefix }}/packaging/theme/kowalski-voice-chat.desktop"
+    dest: "{{ kow_home }}/.config/autostart/kowalski-voice-chat.desktop"
+    mode: "0644"
+  when: kow_voice_chat_autostart | bool

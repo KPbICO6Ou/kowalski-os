@@ -31,6 +31,9 @@ ollama_models:
 desktop_packages:
   - xfce4
   - xfce4-goodies
+  - xfce4-terminal     # the terminal the voice-chat autostart opens
+  - wmctrl             # raise/focus the chat window on the wake word
+  - xdotool            # window-raise fallback (also used by core uiauto)
   - lightdm
   - slick-greeter
   - xorg

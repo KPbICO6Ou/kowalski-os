@@ -78,6 +78,15 @@ custom phrase such as **"kowalski" needs a trained model file**. Until then, use
 `both` so push-to-talk always works while you dial in the model. The RMS energy
 VAD endpoints utterances; silero-vad is the production upgrade.
 
+**Raise on wake (desktop).** On a hands-free (wake/hotkey) turn, `kow chat` brings
+its own terminal to the foreground so the dialog appears on screen — best-effort
+X11 via `wmctrl`/`xdotool`, a no-op without `$DISPLAY`. Disable with
+`KOW_VOICE_RAISE_WINDOW=0`. To make it always-on, autostart a minimized voice-chat
+terminal: provisioning installs `~/.config/autostart/kowalski-voice-chat.desktop`
+when `kow_voice_chat_autostart=true` (it runs `kow chat --voice --resume`), so
+saying "Ковальски" anywhere raises the window. Only run one mic owner at a time —
+don't pair it with `kow-voice run` or a second `kow chat --voice`.
+
 ### Personal wake word — one command (recommended)
 
 Train a wake word on **your own voice**, end to end, with a single command:

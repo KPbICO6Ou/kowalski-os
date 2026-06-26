@@ -476,6 +476,10 @@ async def run_chat(
                 if not speak:
                     continue
                 if by_voice:
+                    if getattr(vsettings, "raise_window", True):
+                        # bring this terminal to the foreground (best-effort X11)
+                        from .desktop import raise_own_window
+                        await asyncio.get_event_loop().run_in_executor(None, raise_own_window)
                     await voice_io.play_cue()  # earcon: mic is now listening
                 # Inline indicator on the input line; \r + clear-to-EOL (\033[K)
                 # overwrites it in place with the result (or the cancel/error).
