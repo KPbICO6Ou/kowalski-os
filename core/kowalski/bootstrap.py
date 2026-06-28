@@ -164,19 +164,11 @@ def _register_mail_tools(registry: ToolRegistry, config: Config, store: Store) -
     imap → real IMAP/SMTP; if its optional deps aren't importable we skip the
     mail tools entirely rather than crash the daemon.
     """
-    from .mail.drafts import DraftStore
+    from .mail import DraftStore, build_backend
 
-    backend_kind = config.get("KOW_MAIL_BACKEND", "mock").lower()
-    if backend_kind == "imap":
-        from .mail.imap_smtp import ImapSmtpBackend
-
-        if not ImapSmtpBackend.importable():
-            return  # 'mail' extra not installed — mail tools simply absent
-        backend = ImapSmtpBackend(config)
-    else:
-        from .mail.mock import MockMailBackend
-
-        backend = MockMailBackend()
+    backend = build_backend(config)
+    if backend is None:
+        return  # KOW_MAIL_BACKEND=imap but the 'mail' extra isn't installed
     registry.register_all(mail.build_tools(backend, DraftStore(store)))
 
 

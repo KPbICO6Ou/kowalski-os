@@ -81,6 +81,16 @@ def main(argv: list[str] | None = None) -> int:
     journal_tail = journal_sub.add_parser("tail", help="show recent journal entries")
     journal_tail.add_argument("-n", type=int, default=20, dest="limit")
 
+    mail_p = sub.add_parser("mail", help="search/read your mailbox (uses KOW_MAIL_BACKEND)")
+    mail_sub = mail_p.add_subparsers(dest="mail_command")
+    mail_search = mail_sub.add_parser("search", help="search by substring over subject/from/snippet")
+    mail_search.add_argument("query", help="text to match")
+    mail_search.add_argument("--folder", default="INBOX", help="folder to search (default INBOX)")
+    mail_search.add_argument("--limit", type=int, default=20, help="max results (default 20)")
+    mail_read = mail_sub.add_parser("read", help="read one message by id")
+    mail_read.add_argument("message_id", help="message id from `kow mail search`")
+    mail_sub.add_parser("folders", help="list mailbox folders")
+
     sub.add_parser("settings", help="open the settings TUI (inputs + toggles)")
 
     setup = sub.add_parser("setup", help="settings TUI (no args) or show/get/set")
@@ -112,6 +122,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_tools_list(args)
     if args.command == "journal" and args.journal_command == "tail":
         return cmd_journal_tail(args)
+    if args.command == "mail":
+        return cmd_mail(args)
     if args.command == "settings":
         from .settings_cli import cmd_settings_tui
 
@@ -418,6 +430,57 @@ def cmd_journal_tail(args) -> int:
     finally:
         store.close()
     return 0
+
+
+def cmd_mail(args) -> int:
+    """Direct mailbox access from the terminal (search/read/folders), using the
+    same backend as the agent's mail.* tools (KOW_MAIL_BACKEND)."""
+    from .mail import build_backend
+
+    if not getattr(args, "mail_command", None):
+        print("usage: kow mail {search|read|folders}", file=sys.stderr)
+        return 2
+    config = Config.load()
+    backend = build_backend(config)
+    if backend is None:
+        print("mail: KOW_MAIL_BACKEND=imap but the 'mail' extra isn't installed "
+              "(pip install 'kowalski[mail]').", file=sys.stderr)
+        return 2
+    return asyncio.run(_run_mail(args, backend))
+
+
+async def _run_mail(args, backend) -> int:
+    try:
+        if args.mail_command == "folders":
+            for name in await backend.list_folders():
+                print(name)
+            return 0
+        if args.mail_command == "search":
+            summaries = await backend.search(args.query, folder=args.folder, limit=args.limit)
+            if not summaries:
+                print("No messages found.")
+                return 0
+            for summary in summaries:
+                flag = "*" if summary.unread else " "
+                print(f"{flag} [{summary.id}] {summary.date}  "
+                      f"{summary.from_addr}  —  {summary.subject}")
+            return 0
+        if args.mail_command == "read":
+            message = await backend.read(args.message_id)
+            print(f"Subject: {message.subject}")
+            print(f"From: {message.from_addr}")
+            print(f"To: {', '.join(message.to)}")
+            print(f"Date: {message.date}\n")
+            print(message.body_text)
+            return 0
+    except (KeyError, LookupError) as exc:
+        print(f"Message not found: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:  # IMAP/connection errors must not dump a traceback
+        print(f"mail error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    print("usage: kow mail {search|read|folders}", file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":
