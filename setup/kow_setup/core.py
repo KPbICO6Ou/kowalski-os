@@ -14,6 +14,21 @@ from .config import write_conf
 
 SERVICES = ("ollama", "stt", "tts")
 WAKE_MODES = ("push_to_talk", "wake_word", "both")
+MAIL_MODES = ("imap", "mock", "skip")
+# `mail` answers key -> kowalski.conf key.
+MAIL_KEY_MAP = (
+    ("imap_host", "IMAP_HOST"),
+    ("imap_port", "IMAP_PORT"),
+    ("imap_user", "IMAP_USER"),
+    ("imap_password", "IMAP_PASSWORD"),
+    ("imap_ssl", "IMAP_SSL"),
+    ("smtp_host", "SMTP_HOST"),
+    ("smtp_port", "SMTP_PORT"),
+    ("smtp_user", "SMTP_USER"),
+    ("smtp_password", "SMTP_PASSWORD"),
+    ("smtp_tls", "SMTP_TLS"),
+    ("mail_from", "MAIL_FROM"),
+)
 OLLAMA_DEFAULT_PORT = 11434
 # Per-service default port appended when the user gives a host with no port.
 SERVICE_DEFAULT_PORT = {"ollama": OLLAMA_DEFAULT_PORT, "stt": 5051, "tts": 5052}
@@ -136,10 +151,32 @@ def build_voice_updates(raw_answers: dict) -> dict[str, str]:
     return updates
 
 
+def build_mail_updates(raw_answers: dict) -> dict[str, str]:
+    """Map the optional `mail` answers section to KOW_MAIL_BACKEND + IMAP/SMTP
+    keys. mode 'imap' writes the credentials; 'mock' resets to the dev backend;
+    'skip'/absent leaves the current mail config untouched. Secrets land only in
+    the 0600 kowalski.conf (write_conf chmods it)."""
+    mail = raw_answers.get("mail") or {}
+    mode = mail.get("mode")
+    if mode and mode not in MAIL_MODES:
+        raise ValueError(f"mail: invalid mode '{mode}'")
+    if mode == "mock":
+        return {"KOW_MAIL_BACKEND": "mock"}
+    if mode != "imap":
+        return {}
+    updates: dict[str, str] = {"KOW_MAIL_BACKEND": "imap"}
+    for key, conf_key in MAIL_KEY_MAP:
+        value = mail.get(key)
+        if value is not None and str(value) != "":
+            updates[conf_key] = str(value)
+    return updates
+
+
 def run(raw_answers: dict, config_path: Path, accept_warnings: bool = False) -> tuple[int, list[CheckResult]]:
     """Returns (exit_code, results). Config is written only on success."""
     answers = parse_answers(raw_answers)
     voice_updates = build_voice_updates(raw_answers)  # validate before any checks
+    mail_updates = build_mail_updates(raw_answers)    # validate before any checks
     results = run_checks(answers)
 
     failed = [r for r in results if not r.ok]
@@ -148,6 +185,7 @@ def run(raw_answers: dict, config_path: Path, accept_warnings: bool = False) -> 
 
     updates = build_config_updates(answers)
     updates.update(voice_updates)
+    updates.update(mail_updates)
     if updates:
         write_conf(config_path, updates)
     return 0, results
@@ -160,6 +198,7 @@ def write_config(raw_answers: dict, config_path: Path) -> dict[str, str]:
     answers = parse_answers(raw_answers)
     updates = build_config_updates(answers)
     updates.update(build_voice_updates(raw_answers))
+    updates.update(build_mail_updates(raw_answers))
     if updates:
         write_conf(config_path, updates)
     return updates

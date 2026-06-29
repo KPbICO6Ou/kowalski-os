@@ -62,3 +62,25 @@ def check_tts(url: str, token: str | None = None) -> CheckResult:
     except Exception as exc:
         return CheckResult(service="tts", ok=False, error=str(exc))
     return CheckResult(service="tts", ok=True, latency_ms=latency, detail=payload)
+
+
+def check_imap(host: str, port: int, user: str, password: str, ssl: bool = True) -> CheckResult:
+    """Log in to the IMAP server and list folders. Needs the 'mail' extra
+    (imap_tools); reports a clear error when it isn't installed."""
+    try:
+        from imap_tools import MailBox, MailBoxUnencrypted
+    except ImportError:
+        return CheckResult(
+            service="mail", ok=False,
+            error="the 'mail' extra isn't installed (pip install 'kowalski[mail]')",
+        )
+    try:
+        started = time.perf_counter()
+        box_cls = MailBox if ssl else MailBoxUnencrypted
+        with box_cls(host, port=port).login(user, password) as box:
+            folders = [f.name for f in box.folder.list()]
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        return CheckResult(service="mail", ok=True, latency_ms=latency_ms,
+                           detail={"folders": folders})
+    except Exception as exc:
+        return CheckResult(service="mail", ok=False, error=str(exc))

@@ -17,6 +17,18 @@ MANAGED_KEYS = (
     "KOW_WAKE_MODE",
     "KOW_WAKE_WORD",
     "KOW_WAKE_MODEL",
+    "KOW_MAIL_BACKEND",
+    "IMAP_HOST",
+    "IMAP_PORT",
+    "IMAP_USER",
+    "IMAP_PASSWORD",
+    "IMAP_SSL",
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_USER",
+    "SMTP_PASSWORD",
+    "SMTP_TLS",
+    "MAIL_FROM",
 )
 
 

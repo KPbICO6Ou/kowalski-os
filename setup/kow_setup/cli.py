@@ -141,6 +141,9 @@ def ask_interactively(current: dict | None = None) -> dict:
     voice = ask_voice(current)
     if voice:
         raw["voice"] = voice
+    mail = ask_mail(current)
+    if mail:
+        raw["mail"] = mail
     return raw
 
 
@@ -277,6 +280,72 @@ def ask_voice(current: dict | None = None) -> dict:
             key = "wake_model" if any(s in word for s in (".onnx", ".tflite", "/")) else "wake_word"
             voice[key] = word
     return voice
+
+
+def ask_mail(current: dict | None = None) -> dict:
+    """Optional mailbox setup: configure a real IMAP/SMTP account (probed inline)
+    or skip. Blank/skip leaves the current mail config untouched. SMTP host/user
+    default to the IMAP ones; a blank SMTP password reuses the IMAP one."""
+    from getpass import getpass
+
+    from .checks import check_imap
+
+    current = current or {}
+    configured = current.get("KOW_MAIL_BACKEND", "") == "imap"
+    print("\nMail (optional) — connect a real IMAP/SMTP mailbox:")
+    default = "y" if configured else "n"
+    choice = input(f"  set up mail now? [{'Y/n' if configured else 'y/N'}] ").strip().lower() or default
+    if not choice.startswith("y"):
+        return {}
+    while True:
+        imap_host = input(f"  IMAP host{_hint(current.get('IMAP_HOST', ''))}: ").strip() \
+            or current.get("IMAP_HOST", "")
+        imap_port = input(f"  IMAP port [{current.get('IMAP_PORT', '993')}]: ").strip() \
+            or current.get("IMAP_PORT", "993")
+        imap_user = input(f"  IMAP user{_hint(current.get('IMAP_USER', ''))}: ").strip() \
+            or current.get("IMAP_USER", "")
+        imap_password = getpass("  IMAP password (app-password for Gmail/Outlook; blank = keep): ").strip()
+        imap_ssl = not input("  IMAP over SSL? [Y/n]: ").strip().lower().startswith("n")
+        smtp_host = input(f"  SMTP host [{current.get('SMTP_HOST', '') or imap_host}]: ").strip() \
+            or current.get("SMTP_HOST", "") or imap_host
+        smtp_port = input(f"  SMTP port [{current.get('SMTP_PORT', '587')}]: ").strip() \
+            or current.get("SMTP_PORT", "587")
+        smtp_user = input(f"  SMTP user [{current.get('SMTP_USER', '') or imap_user}]: ").strip() \
+            or current.get("SMTP_USER", "") or imap_user
+        smtp_password = getpass("  SMTP password (blank = same as IMAP / keep): ").strip()
+        smtp_tls = not input("  SMTP STARTTLS? [Y/n]: ").strip().lower().startswith("n")
+
+        entry: dict = {
+            "mode": "imap",
+            "imap_host": imap_host, "imap_port": imap_port, "imap_user": imap_user,
+            "imap_ssl": "1" if imap_ssl else "0",
+            "smtp_host": smtp_host, "smtp_port": smtp_port, "smtp_user": smtp_user,
+            "smtp_tls": "1" if smtp_tls else "0",
+        }
+        if imap_password:
+            entry["imap_password"] = imap_password
+        if smtp_password:
+            entry["smtp_password"] = smtp_password
+        elif imap_password:
+            entry["smtp_password"] = imap_password  # default SMTP to the IMAP password
+
+        probe_pw = imap_password or current.get("IMAP_PASSWORD", "")
+        try:
+            port_num = int(imap_port)
+        except ValueError:
+            port_num = 993
+        result = check_imap(imap_host, port_num, imap_user, probe_pw, imap_ssl)
+        if result.ok:
+            count = len(result.detail.get("folders", []))
+            print(f"  [OK] IMAP {imap_host} — {result.latency_ms} ms, {count} folder(s)")
+            return entry
+        print(f"  [FAIL] {result.error}")
+        decision = input("  [r]etry / [s]kip mail / keep [a]nyway? [r] ").strip().lower()
+        if decision.startswith("s"):
+            return {}
+        if decision.startswith("a"):
+            return entry
+        # else (blank or "r"): re-enter and re-probe
 
 
 if __name__ == "__main__":

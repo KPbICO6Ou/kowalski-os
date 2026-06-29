@@ -11,3 +11,20 @@ stt:
   language: "ru"
 tts:
   mode: skip
+# Optional wake activation (push_to_talk | wake_word | both).
+# voice:
+#   wake_mode: both
+#   wake_word: kowalski
+# Optional mailbox (mode: imap | mock | skip). Secrets land in the 0600 conf;
+# for Gmail/Outlook use an app-password. SMTP host/user default to the IMAP ones.
+# mail:
+#   mode: imap
+#   imap_host: "imap.example.com"
+#   imap_port: "993"
+#   imap_user: "me@example.com"
+#   imap_password: "app-password"
+#   imap_ssl: "1"
+#   smtp_host: "smtp.example.com"
+#   smtp_port: "587"
+#   smtp_user: "me@example.com"
+#   smtp_tls: "1"

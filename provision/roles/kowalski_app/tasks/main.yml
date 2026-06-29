@@ -129,6 +129,22 @@
   changed_when: true
   when: kow_voice_train | bool and (kow_torch_present.rc | default(1)) != 0
 
+- name: Check whether the mail stack (imap-tools, aiosmtplib) is present
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.command: "{{ kow_voice_venv }}/bin/python -c 'import imap_tools, aiosmtplib'"
+  register: kow_mail_present
+  changed_when: false
+  failed_when: false
+  when: kow_mail | bool
+
+- name: Install the mail stack (core[mail]) for KOW_MAIL_BACKEND=imap
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.command: '"{{ kow_voice_venv }}/bin/pip" install -e "{{ kow_prefix }}/core[mail]"'
+  changed_when: true
+  when: kow_mail | bool and (kow_mail_present.rc | default(1)) != 0
+
 - name: Link the CLI launchers into /usr/local/bin
   become: true
   ansible.builtin.file:
