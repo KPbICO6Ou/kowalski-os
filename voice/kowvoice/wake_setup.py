@@ -83,10 +83,10 @@ async def run_setup(phrase: str, *, count: int = 30, negatives: int = 12,
         print("  test it any time with: kow-voice wake-test")
         return 0
     if _confirm("Test it live now?"):
-        from .cli import cmd_wake_test
+        from .wake_test import run_wake_test
 
         try:
-            await cmd_wake_test()
+            await run_wake_test()
         except KeyboardInterrupt:
             print()
     return 0

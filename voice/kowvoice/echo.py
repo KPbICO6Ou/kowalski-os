@@ -9,7 +9,7 @@ from .console import clear_line, mic_meter, pr
 
 
 async def run_echo(settings=None) -> int:
-    from .audio_devices import EnergyVadRecorder, SoundDeviceSink, _quiet_alsa
+    from .audio_devices import EnergyVadRecorder, SoundDeviceSink, quiet_alsa
     from .cues import load_clip
     from .settings import VoiceSettings
     from .types import AudioClip
@@ -24,7 +24,7 @@ async def run_echo(settings=None) -> int:
         if audio is None:
             return
         try:
-            with _quiet_alsa():
+            with quiet_alsa():
                 await sink.play(audio)
         except Exception as exc:
             pr(f"  (playback failed: {exc})")

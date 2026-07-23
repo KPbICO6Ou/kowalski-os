@@ -36,7 +36,7 @@ def validate_take(utt) -> tuple[bool, str]:
 
 async def run_record(phrase: str, *, count: int = 30, negatives: int = 12,
                      settings=None) -> int:
-    from .audio_devices import EnergyVadRecorder, SoundDeviceSink, _quiet_alsa
+    from .audio_devices import EnergyVadRecorder, SoundDeviceSink, quiet_alsa
     from .cues import load_clip
     from .settings import VoiceSettings
     from .stt_http import pcm_to_wav
@@ -60,7 +60,7 @@ async def run_record(phrase: str, *, count: int = 30, negatives: int = 12,
         if audio is None:
             return
         try:
-            with _quiet_alsa():
+            with quiet_alsa():
                 await sink.play(audio)
         except Exception:
             pass

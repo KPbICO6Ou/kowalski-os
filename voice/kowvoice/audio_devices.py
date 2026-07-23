@@ -17,7 +17,7 @@ from .types import AudioClip, Utterance
 
 
 @contextlib.contextmanager
-def _quiet_alsa():
+def quiet_alsa():
     """Hide PortAudio/ALSA's C-level probe chatter (it writes to fd 2 directly,
     e.g. paInvalidSampleRate when we try 16 kHz on a raw hw device)."""
     try:
@@ -34,7 +34,7 @@ def _quiet_alsa():
         os.close(saved)
 
 
-def _resolve_device(device, want_output: bool):
+def resolve_device(device, want_output: bool):
     """Resolve a saved device name/substring to a sounddevice INDEX (what the mic
     picker opens with), since opening by the full name string is unreliable. None
     means the system default; an int is passed through. Never raises."""
@@ -58,7 +58,7 @@ def _resolve_device(device, want_output: bool):
     return None  # not found -> system default
 
 
-def _open_capture(device, target_sr: int, block_ms: int):
+def open_capture(device, target_sr: int, block_ms: int):
     """Open a callback-mode int16 mono input stream; return
     (stream, frames_queue, capture_sr, block_samples).
 
@@ -83,25 +83,25 @@ def _open_capture(device, target_sr: int, block_ms: int):
         except queue.Full:
             pass  # drop on overflow rather than block the audio callback
 
-    def _start(sr: int):
+    def start_stream(sr: int):
         block = max(1, int(sr * block_ms / 1000))
         stream = sd.RawInputStream(samplerate=sr, channels=1, dtype="int16",
                                    blocksize=block, device=device, callback=callback)
         stream.start()
         return stream, block
 
-    with _quiet_alsa():  # a hw device rejecting target_sr is expected, not noise
+    with quiet_alsa():  # a hw device rejecting target_sr is expected, not noise
         try:
-            stream, block = _start(target_sr)
+            stream, block = start_stream(target_sr)
             return stream, frames, target_sr, block
         except Exception:
             qd = device if device is not None else sd.default.device[0]
             native = int(sd.query_devices(qd)["default_samplerate"])
-            stream, block = _start(native)
+            stream, block = start_stream(native)
             return stream, frames, native, block
 
 
-async def _next_frame(loop, frames):
+async def next_frame(loop, frames):
     """Await the next captured chunk (bytes), or None if the mic stalled for ~1 s
     (so a dead device can't block forever and cancellation stays responsive)."""
     import queue
@@ -112,12 +112,25 @@ async def _next_frame(loop, frames):
         return None
 
 
-def _close_capture(stream) -> None:
+def close_capture(stream) -> None:
     """Tear down a capture stream, swallowing teardown errors."""
     with contextlib.suppress(Exception):
         stream.stop()
     with contextlib.suppress(Exception):
         stream.close()
+
+
+def require_mic() -> str | None:
+    """An error string when the [mic] audio stack is missing, else None."""
+    import importlib.util
+
+    missing = [m for m in ("sounddevice", "numpy") if importlib.util.find_spec(m) is None]
+    if missing:
+        return (
+            f"voice hardware stack unavailable (missing: {', '.join(missing)}). "
+            "Install the mic extra: pip install -e 'voice[mic]'"
+        )
+    return None
 
 
 class PushToTalkWake:
@@ -142,9 +155,9 @@ class OpenWakeWordListener:
         self.sample_rate = sample_rate
         self.threshold = threshold
         self.device = device or None  # None = system default input
-        self._oww = None
+        self.oww = None
 
-    def _load(self):
+    def load_model(self):
         # ONNX is the default framework: openWakeWord pins tflite-runtime, which
         # has no Python 3.12 wheel, so we install openWakeWord --no-deps with
         # onnxruntime and run the .onnx model variants. Only an explicit .tflite
@@ -158,18 +171,18 @@ class OpenWakeWordListener:
             return Model(wakeword_models=[model], inference_framework="onnx")
         return Model(inference_framework="onnx")
 
-    async def _frames(self):  # pragma: no cover - needs hardware
+    async def mic_frames(self):  # pragma: no cover - needs hardware
         """Yield 16 kHz int16 frames (~80 ms) from the configured input device.
         Opens at 16 kHz (what openWakeWord wants); a raw hw device that rejects it
         falls back to the native rate + linear resample, like EnergyVadRecorder."""
         import numpy as np
 
-        dev = _resolve_device(self.device, want_output=False)
-        stream, frames, capture_sr, _ = _open_capture(dev, 16000, 80)  # ~80 ms frames
+        dev = resolve_device(self.device, want_output=False)
+        stream, frames, capture_sr, _ = open_capture(dev, 16000, 80)  # ~80 ms frames
         loop = asyncio.get_running_loop()
         try:
             while True:
-                data = await _next_frame(loop, frames)
+                data = await next_frame(loop, frames)
                 if data is None:
                     continue
                 pcm = np.frombuffer(data, dtype=np.int16)
@@ -179,18 +192,18 @@ class OpenWakeWordListener:
                     pcm = np.interp(pos, np.arange(pcm.size), pcm).astype(np.int16)
                 yield pcm
         finally:
-            _close_capture(stream)
+            close_capture(stream)
 
     async def wait_for_wake(self) -> None:  # pragma: no cover - needs hardware + model
         import os
         import sys
 
         debug = os.getenv("KOW_WAKE_DEBUG", "").strip().lower() not in ("", "0", "false", "no")
-        if self._oww is None:
-            self._oww = self._load()
+        if self.oww is None:
+            self.oww = self.load_model()
         last = 0.0
-        async for pcm in self._frames():
-            scores = self._oww.predict(pcm)
+        async for pcm in self.mic_frames():
+            scores = self.oww.predict(pcm)
             top = max(scores.values()) if scores else 0.0
             if debug and (top >= 0.1 and abs(top - last) >= 0.05):
                 last = top
@@ -207,12 +220,12 @@ class OpenWakeWordListener:
         audio is there but the word doesn't match)."""
         import numpy as np
 
-        if self._oww is None:
-            self._oww = self._load()
-        async for pcm in self._frames():
+        if self.oww is None:
+            self.oww = self.load_model()
+        async for pcm in self.mic_frames():
             rms = (float(np.sqrt(np.mean((pcm.astype(np.float32) / 32768.0) ** 2)))
                    if pcm.size else 0.0)
-            yield self._oww.predict(pcm), rms
+            yield self.oww.predict(pcm), rms
 
 
 class CombinedWake:
@@ -283,7 +296,7 @@ class EnergyVadRecorder:
         import numpy as np
 
         # Resolve a saved device name to an index (opening by full name is flaky).
-        dev = _resolve_device(self.device, want_output=False)
+        dev = resolve_device(self.device, want_output=False)
         silence_blocks = max(1, self.silence_ms // 30)
         captured: list[bytes] = []
         trailing_silence = 0
@@ -294,7 +307,7 @@ class EnergyVadRecorder:
         # Callback-mode capture (safe teardown on Ctrl-C). Prefer 16 kHz (what STT
         # wants); a raw hw device that rejects it falls back to its native rate,
         # resampled afterwards. 30 ms blocks for VAD granularity.
-        stream, frames, capture_sr, block = _open_capture(dev, self.sample_rate, 30)
+        stream, frames, capture_sr, block = open_capture(dev, self.sample_rate, 30)
 
         max_blocks = max(1, int(self.max_seconds * capture_sr / block))
         onset_blocks = max(1, int(self.onset_timeout * capture_sr / block))
@@ -305,7 +318,7 @@ class EnergyVadRecorder:
         try:
             n = 0
             while n < max_blocks:
-                data = await _next_frame(loop, frames)
+                data = await next_frame(loop, frames)
                 if data is None:
                     continue  # mic stall (~1 s) — keep waiting, don't count it
                 captured.append(data)
@@ -335,7 +348,7 @@ class EnergyVadRecorder:
                     break
                 n += 1
         finally:
-            _close_capture(stream)
+            close_capture(stream)
 
         # Reject silence and brief blips (a click/breath that tripped the threshold
         # for a moment): Whisper hallucinates whole sentences from such clips.
@@ -353,7 +366,7 @@ class SoundDeviceSink:
     """Play a WAV/PCM AudioClip on the chosen output device; stop() interrupts."""
 
     def __init__(self, device: str = "") -> None:
-        self._playing = False
+        self.playing = False
         self.device = device or None  # None = system default output
 
     async def play(self, clip: AudioClip) -> None:  # pragma: no cover - needs audio out
@@ -371,17 +384,17 @@ class SoundDeviceSink:
             sample_rate = clip.sample_rate or 16000
             frames = clip.audio
         samples = np.frombuffer(frames, dtype=np.int16)
-        self._playing = True
-        sd.play(samples, sample_rate, device=_resolve_device(self.device, want_output=True))
+        self.playing = True
+        sd.play(samples, sample_rate, device=resolve_device(self.device, want_output=True))
         loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(None, sd.wait)
         finally:
-            self._playing = False
+            self.playing = False
 
     async def stop(self) -> None:  # pragma: no cover - needs audio out
         import sounddevice as sd
 
-        if self._playing:
+        if self.playing:
             sd.stop()
-            self._playing = False
+            self.playing = False

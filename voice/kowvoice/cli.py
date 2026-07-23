@@ -5,10 +5,14 @@
   kow-voice once                one push-to-talk turn (for a global hotkey)
   kow-voice mic                 pick the input microphone (level meter + echo)
   kow-voice speaker             pick the TTS output device (with a test tone)
+  kow-voice echo                mic + speaker round-trip (hear yourself back)
   kow-voice check               probe STT, TTS, and the kow-core socket
   kow-voice test                round-trip self-test (greet → record → STT → echo)
   kow-voice chat                voice + text chat in one conversation
   kow-voice wake <phrase>       set up a personal wake word (record + train + test)
+  kow-voice wake-test           live wake-word score meter (say it, watch it fire)
+  kow-voice wake-record         record wake-word samples (used by `wake`)
+  kow-voice wake-fit            train on recorded samples (used by `wake`)
   kow-voice train <phrase>      prepare a custom wake word (synthetic; legacy)
 """
 
@@ -143,8 +147,10 @@ def main(argv: list[str] | None = None) -> int:
 
         return asyncio.run(run_test())
     if args.command == "wake-test":
+        from .wake_test import run_wake_test
+
         try:
-            return asyncio.run(cmd_wake_test())
+            return asyncio.run(run_wake_test())
         except KeyboardInterrupt:
             print()
             return 0
@@ -267,142 +273,11 @@ def _build_real_pipeline(settings: VoiceSettings):
     )
 
 
-def _require_mic() -> str | None:
-    """Return an error string if the [mic] audio stack is missing, else None."""
-    import importlib.util
-
-    missing = [m for m in ("sounddevice", "numpy") if importlib.util.find_spec(m) is None]
-    if missing:
-        return (
-            f"voice hardware stack unavailable (missing: {', '.join(missing)}). "
-            "Install the mic extra: pip install -e 'voice[mic]'"
-        )
-    return None
-
-
-async def cmd_wake_test() -> int:
-    """Live wake-word score meter: hear a reference pronunciation, then say the
-    word and watch the score (a chime fires on each detection; Space replays the
-    prompt, q quits). Surfaces mic/model errors the wake loop would swallow."""
-    import importlib.util
-    import os
-    import select
-    import sys
-    import termios
-    import tty
-
-    settings = VoiceSettings.load()
-    err = _require_mic()
-    if err:
-        print(err, file=sys.stderr)
-        return 2
-    if importlib.util.find_spec("openwakeword") is None:
-        print("wake word needs openWakeWord: pip install --no-deps openwakeword", file=sys.stderr)
-        return 2
-    model = settings.wake_model or settings.wake_word
-    if not model:
-        print("no wake model configured (set KOW_WAKE_MODEL or KOW_WAKE_WORD)", file=sys.stderr)
-        return 2
-
-    from .audio_devices import OpenWakeWordListener, SoundDeviceSink, _quiet_alsa
-    from .cues import sound
-    from .tts_http import HttpTtsClient
-    from .types import AudioClip
-
-    listener = OpenWakeWordListener(model, settings.sample_rate, settings.wake_threshold,
-                                    device=settings.input_device)
-    sink = SoundDeviceSink(device=settings.output_device)
-
-    def pr(s: str = "") -> None:  # col-0 line, robust to a terminal left in raw mode
-        sys.stdout.write("\r" + s + "\r\n")
-        sys.stdout.flush()
-
-    pr(f"wake-test: mic '{settings.input_device or 'system default'}', model '{model}', "
-       f"threshold {settings.wake_threshold}.")
-
-    # Spoken prompt synthesized once: "Скажите" (ru) + the word (en — the model's
-    # training pronunciation). Network only here; the playback is below.
-    phrase = settings.wake_word or "kowalski"
-    say = ref = None
-    try:
-        say = await HttpTtsClient(settings.tts_url, settings.tts_token,
-                                  language="ru").synthesize("Скажите")
-        ref = await HttpTtsClient(settings.tts_url, settings.tts_token,
-                                  language="en").synthesize(phrase)
-    except Exception as exc:
-        pr(f"(reference unavailable: {exc})")
-
-    async def play(*clips) -> None:
-        try:
-            with _quiet_alsa():  # keep ALSA's device-open chatter off the display
-                for clip in clips:
-                    if clip is not None:
-                        await sink.play(clip)
-        except Exception:
-            pass
-
-    bloop_path = sound("bloop.wav")  # success chime on each detection
-    bloop = AudioClip(audio=bloop_path.read_bytes(), format="wav") if bloop_path else None
-
-    pr(f"Say '{phrase}'.  Space — replay '{phrase}', q — quit.")
-    pr()
-    await play(say, ref)  # full spoken prompt once: "Скажите" + the word
-
-    peak = 0.0
-    hits = 0
-    armed = True  # ready to count/announce the next detection
-    raw = sys.stdin.isatty()
-    fd = sys.stdin.fileno()
-    old = termios.tcgetattr(fd) if raw else None
-    if raw:
-        tty.setcbreak(fd)
-    try:
-        async for scores, rms in listener.scores():
-            if raw and select.select([fd], [], [], 0)[0]:
-                ch = os.read(fd, 1)
-                if ch in (b"q", b"\x03"):
-                    break
-                if ch == b" ":
-                    sys.stdout.write("\r\033[K")
-                    sys.stdout.flush()
-                    await play(ref)  # Space replays just the word, no "Скажите"
-            score = max(scores.values()) if scores else 0.0
-            peak = max(peak, score)
-            if score >= settings.wake_threshold:
-                if armed:
-                    armed, hits = False, hits + 1
-                    if bloop is not None:
-                        try:
-                            await sink.play(bloop)
-                        except Exception:
-                            pass
-            elif score < settings.wake_threshold * 0.5:
-                armed = True  # re-arm once the score falls back down
-            lvl = int(min(1.0, rms * 8) * 12)
-            lbar = "█" * lvl + "·" * (12 - lvl)
-            sn = int(min(1.0, score) * 20)
-            sbar = "█" * sn + "·" * (20 - sn)
-            hit = f"  ◀ FIRE ✓{hits}" if score >= settings.wake_threshold else (
-                f"  (✓{hits})" if hits else "")
-            sys.stdout.write(
-                f"\rmic [{lbar}] {rms:.3f} │ score {score:.3f} [{sbar}] peak {peak:.3f}{hit}\033[K"
-            )
-            sys.stdout.flush()
-    except Exception as exc:
-        import traceback
-
-        print(f"\nwake listener error: {type(exc).__name__}: {exc}", file=sys.stderr)
-        print(traceback.format_exc(), file=sys.stderr)
-        return 1
-    finally:
-        if raw:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old)
-    return 0
-
-
 async def cmd_run() -> int:
+    from .audio_devices import require_mic
+
     settings = VoiceSettings.load()
-    err = _require_mic()
+    err = require_mic()
     if err:
         print(err, file=sys.stderr)
         return 2
