@@ -90,6 +90,75 @@ async def read_or_wake(loop_ev, reader, wake):
     return await read_task  # awaits typing if wake errored first; re-raises EOF/etc.
 
 
+def build_agent_runtime(*, model: str, confirmer, dry_run: bool = False):
+    """Config -> store -> scheduler -> registry -> agent loop: the in-process
+    agent runtime shared by run_chat and run_once. The caller owns shutdown
+    (scheduler.shutdown() + store.close())."""
+    from kowalski.agent.loop import AgentLoop
+    from kowalski.bootstrap import build_default_registry, build_llm
+    from kowalski.config import Config
+    from kowalski.conversations import ConversationStore
+    from kowalski.scheduler import ReminderScheduler
+    from kowalski.store import Store
+
+    config = Config.load()
+    store = Store(config.get_path("KOW_DB_PATH"))
+    scheduler = ReminderScheduler(store)
+    registry = build_default_registry(config, store, scheduler, confirmer)
+    if dry_run:
+        registry.dry_run = True
+    conversations = ConversationStore(store)
+    scheduler.start()
+    llm = build_llm(config, model_override=model or "")
+    loop = AgentLoop(
+        llm,
+        registry,
+        max_iterations=config.get_int("KOW_MAX_ITERATIONS"),
+        context_provider=getattr(registry, "context_provider", None),
+    )
+    return config, store, scheduler, conversations, loop
+
+
+async def capture_voice_turn(voice_io, vsettings, by_voice: bool) -> str | None:
+    """One spoken turn's input: raise the window + cue (hands-free only), record
+    with the live meter, transcribe with the dots progress. Returns the transcript,
+    or None when there was no usable speech (messages already printed)."""
+    if by_voice:
+        if getattr(vsettings, "raise_window", True):
+            # bring this terminal to the foreground (best-effort X11)
+            from .desktop import raise_own_window
+            await asyncio.get_event_loop().run_in_executor(None, raise_own_window)
+        await voice_io.play_cue()  # earcon: mic is now listening
+    # Inline indicator on the input line; \r + clear-to-EOL (\033[K)
+    # overwrites it in place with the result (or the cancel/error).
+    print(f"{DIM}🎤 listening… (speak; silence ends it){RESET}", end="", flush=True)
+    try:
+        utterance = await voice_io.record(on_level=mic_meter)
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        # Ctrl-C while recording cancels just this turn (the mic stream
+        # tears down) — back to the prompt instead of crashing out.
+        print(f"\r{DIM}(cancelled){RESET}\033[K")
+        return None
+    except Exception as exc:
+        print(f"\r{DIM}(voice input failed: {exc}){RESET}\033[K")
+        return None
+    if utterance is None or utterance.is_empty:
+        print(f"\r{DIM}(no speech){RESET}\033[K")
+        return None
+    try:
+        async with Work("STT") as w:  # dots while the network STT runs
+            text = await voice_io.transcribe(utterance)
+            w.chars = len(text or "")
+    except Exception as exc:
+        print(f"\r{DIM}(transcription failed: {exc}){RESET}\033[K")
+        return None
+    if not text:
+        print(f"{DIM}(no speech){RESET}")
+        return None
+    print(f"{DIM}you (voice):{RESET} {text}")
+    return text
+
+
 async def run_chat(
     *,
     model: str = "",
@@ -107,13 +176,7 @@ async def run_chat(
     KOW_VOICE_HOTKEY switches to a raw-mode reader so the hotkey can start a turn;
     when the wake word is configured (KOW_WAKE_MODE wake_word/both), saying it
     starts a turn too — raced against typing on a real terminal."""
-    from kowalski.agent.loop import AgentLoop
-    from kowalski.bootstrap import build_default_registry, build_llm
-    from kowalski.config import Config
-    from kowalski.conversations import ConversationStore
     from kowalski.policy import AutoConfirm, InteractiveCliConfirmation
-    from kowalski.scheduler import ReminderScheduler
-    from kowalski.store import Store
 
     from .settings import VoiceSettings
 
@@ -122,14 +185,10 @@ async def run_chat(
     except Exception:
         pass
 
-    config = Config.load()
-    store = Store(config.get_path("KOW_DB_PATH"))
-    scheduler = ReminderScheduler(store)
     confirmer = AutoConfirm() if yes else InteractiveCliConfirmation()
-    registry = build_default_registry(config, store, scheduler, confirmer)
-    if dry_run:
-        registry.dry_run = True
-    conversations = ConversationStore(store)
+    config, store, scheduler, conversations, loop = build_agent_runtime(
+        model=model, confirmer=confirmer, dry_run=dry_run
+    )
 
     if continue_ and not conversation_id:
         conversation_id = conversations.last_conversation_id()
@@ -145,15 +204,6 @@ async def run_chat(
                 f"{DIM}(note: voice input needs the mic extra — "
                 f"pip install -e 'voice[mic]'; typing still works){RESET}"
             )
-
-    scheduler.start()
-    llm = build_llm(config, model_override=model or "")
-    loop = AgentLoop(
-        llm,
-        registry,
-        max_iterations=config.get_int("KOW_MAX_ITERATIONS"),
-        context_provider=getattr(registry, "context_provider", None),
-    )
 
     # Input setup. The wake word and the hotkey both need raw cbreak mode (so the
     # read is cancellable / hotkey-aware); a cooked input() can't be raced, so it
@@ -220,39 +270,9 @@ async def run_chat(
             if not text:
                 if not speak:
                     continue
-                if by_voice:
-                    if getattr(vsettings, "raise_window", True):
-                        # bring this terminal to the foreground (best-effort X11)
-                        from .desktop import raise_own_window
-                        await asyncio.get_event_loop().run_in_executor(None, raise_own_window)
-                    await voice_io.play_cue()  # earcon: mic is now listening
-                # Inline indicator on the input line; \r + clear-to-EOL (\033[K)
-                # overwrites it in place with the result (or the cancel/error).
-                print(f"{DIM}🎤 listening… (speak; silence ends it){RESET}", end="", flush=True)
-                try:
-                    utterance = await voice_io.record(on_level=mic_meter)
-                except (KeyboardInterrupt, asyncio.CancelledError):
-                    # Ctrl-C while recording cancels just this turn (the mic stream
-                    # tears down) — back to the prompt instead of crashing out.
-                    print(f"\r{DIM}(cancelled){RESET}\033[K")
-                    continue
-                except Exception as exc:
-                    print(f"\r{DIM}(voice input failed: {exc}){RESET}\033[K")
-                    continue
-                if utterance is None or utterance.is_empty:
-                    print(f"\r{DIM}(no speech){RESET}\033[K")
-                    continue
-                try:
-                    async with Work("STT") as w:  # dots while the network STT runs
-                        text = await voice_io.transcribe(utterance)
-                        w.chars = len(text or "")
-                except Exception as exc:
-                    print(f"\r{DIM}(transcription failed: {exc}){RESET}\033[K")
-                    continue
+                text = await capture_voice_turn(voice_io, vsettings, by_voice)
                 if not text:
-                    print(f"{DIM}(no speech){RESET}")
                     continue
-                print(f"{DIM}you (voice):{RESET} {text}")
             answer = await drive_turn(loop, text, conversation_id, conversations, config)
             if speak and answer:
                 try:
@@ -274,30 +294,14 @@ async def run_once(*, model: str = "", speak: bool = True, voice_io=None) -> int
 
     Tool confirmations are auto-denied (no GUI on a hotkey turn), so destructive
     actions are blocked by design. `voice_io` is injectable for tests."""
-    from kowalski.agent.loop import AgentLoop
-    from kowalski.bootstrap import build_default_registry, build_llm
-    from kowalski.config import Config
-    from kowalski.conversations import ConversationStore
     from kowalski.policy import AutoDeny
-    from kowalski.scheduler import ReminderScheduler
-    from kowalski.store import Store
 
     from .settings import VoiceSettings
 
-    config = Config.load()
-    store = Store(config.get_path("KOW_DB_PATH"))
-    scheduler = ReminderScheduler(store)
-    registry = build_default_registry(config, store, scheduler, AutoDeny())
-    conversations = ConversationStore(store)
-    conversation_id = conversations.last_conversation_id() or uuid.uuid4().hex
-    scheduler.start()
-    llm = build_llm(config, model_override=model or "")
-    loop = AgentLoop(
-        llm,
-        registry,
-        max_iterations=config.get_int("KOW_MAX_ITERATIONS"),
-        context_provider=getattr(registry, "context_provider", None),
+    config, store, scheduler, conversations, loop = build_agent_runtime(
+        model=model, confirmer=AutoDeny()
     )
+    conversation_id = conversations.last_conversation_id() or uuid.uuid4().hex
     if voice_io is None:
         voice_io = VoiceChatIO(VoiceSettings.load())
     try:
