@@ -150,9 +150,18 @@ kowvoice/
   orchestrator.py  VoiceOrchestrator: the pure state machine + barge-in
   settings.py      env / ttsgen.conf chain / kowalski.conf
   mocks.py         scripted implementations of every protocol (demo + tests)
-  stt_http.py      HttpSttClient (httpx)
+  stt_http.py      HttpSttClient (httpx) + Whisper-hallucination filter
   tts_http.py      HttpTtsClient (httpx)
   agent_socket.py  SocketAgentSession (kow-core unix socket)
   audio_devices.py mic/VAD/wake/playback (sounddevice, [mic] extra)
-  cli.py           kow-voice demo | run | check
+  console.py       shared terminal presentation (pr, mic meter, dots progress)
+  term_input.py    cbreak line reader + in-chat hotkey decoding (TALK/STOP)
+  voice_io.py      VoiceChatIO: mic->STT in, TTS->speaker out for the chat loop
+  chat.py          `kow chat --voice` loop (typing raced against the wake word)
+  desktop.py       raise the chat terminal on a hands-free turn (X11)
+  cues.py          bundled earcons (listen/bloop/oops) + loading helpers
+  wake_record.py / wake_fit.py / wake_setup.py / wake_test.py
+                   personal wake word: record -> train -> verify -> live test
+  echo.py          mic + speaker round-trip test
+  cli.py           kow-voice CLI: parser + dispatch for the commands above
 ```
