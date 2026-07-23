@@ -201,7 +201,7 @@
     dest: "/usr/local/bin/{{ item }}"
     state: link
     force: true
-  loop: [kow, kow-omni, kow-voice, kow-index, kow-setup, kow-clip]
+  loop: [kow, kow-omni, kow-mail, kow-voice, kow-index, kow-setup, kow-clip]
 
 - name: Ensure the config directory exists
   become: true
