@@ -62,12 +62,12 @@ def train_instructions(phrase: str) -> str:
     )
 
 
-def _merge_conf(updates: dict[str, str], config_path: Path | None = None) -> Path:
+def merge_conf(updates: dict[str, str], config_path: Path | None = None) -> Path:
     """Merge KEY=VALUE updates into kowalski.conf, preserving every other key."""
-    from .settings import _kowalski_conf_path, _parse_conf
+    from .settings import kowalski_conf_path, parse_conf
 
-    path = Path(config_path) if config_path else _kowalski_conf_path()
-    values = _parse_conf(path)
+    path = Path(config_path) if config_path else kowalski_conf_path()
+    values = parse_conf(path)
     values.update(updates)
     if values.get("KOW_WAKE_MODE", "push_to_talk") == "push_to_talk":
         values["KOW_WAKE_MODE"] = "both"  # a wake word is useless in push-to-talk only
@@ -138,7 +138,7 @@ def run_train(
         return 0
 
     if is_pretrained(phrase):
-        _merge_conf({"KOW_WAKE_WORD": phrase}, config_path)
+        merge_conf({"KOW_WAKE_WORD": phrase}, config_path)
         on_text(f"'{phrase}' is a pretrained openWakeWord model — configured "
                 f"(KOW_WAKE_WORD={phrase}, wake mode = both).")
         return 0
@@ -168,7 +168,7 @@ def run_train(
         finally:
             if tmp:
                 shutil.rmtree(tmp, ignore_errors=True)
-        _merge_conf({"KOW_WAKE_MODEL": str(dest), "KOW_WAKE_WORD": slugify(phrase)}, config_path)
+        merge_conf({"KOW_WAKE_MODEL": str(dest), "KOW_WAKE_WORD": slugify(phrase)}, config_path)
         on_text(f"registered wake model: {dest}\n"
                 f"(KOW_WAKE_WORD={slugify(phrase)}, KOW_WAKE_MODEL set, wake mode = both) "
                 "— try: kow-voice run")

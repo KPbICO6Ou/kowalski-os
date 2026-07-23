@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.answers:
             parser.error("--non-interactive requires --answers FILE")
         raw = yaml.safe_load(args.answers.read_text()) or {}
-        return _run_non_interactive(raw, args)
+        return run_non_interactive(raw, args)
 
     # Interactive: the wizard probes each service and lets you re-enter on a
     # failed check, so there is no separate gating pass — write what was
@@ -56,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _default_train_runner(word: str) -> None:
+def default_train_runner(word: str) -> None:
     import subprocess
 
     subprocess.run(["kow-voice", "train", word], check=False)
@@ -73,10 +73,10 @@ def maybe_offer_wake_training(raw: dict, prompt=input, runner=None) -> None:
     if not answer.startswith("y"):
         print(f"  (later: kow-voice train {word})")
         return
-    (runner or _default_train_runner)(word)
+    (runner or default_train_runner)(word)
 
 
-def _run_non_interactive(raw: dict, args) -> int:
+def run_non_interactive(raw: dict, args) -> int:
     """Answers-file path: checks gate the write (no human to re-prompt)."""
     try:
         code, results = run(raw, args.config, accept_warnings=args.accept_warnings)
@@ -98,17 +98,17 @@ def _run_non_interactive(raw: dict, args) -> int:
     return code
 
 
-def _hint(value: str) -> str:
+def hint(value: str) -> str:
     """' [value]' suffix shown when there is a current value to keep on Enter."""
     return f" [{value}]" if value else ""
 
 
-def _default_mode(service: str, current: dict) -> str:
+def default_mode(service: str, current: dict) -> str:
     """A service already configured defaults to 'remote', otherwise 'skip'."""
     return "r" if current.get(SERVICE_URL_KEY[service]) else "s"
 
 
-def _suggested_host(raw: dict, current: dict) -> str:
+def suggested_host(raw: dict, current: dict) -> str:
     """Host to pre-fill STT/TTS with — the same box as Ollama (services are
     usually co-located): the just-entered Ollama URL, else the configured one."""
     ollama = raw.get("ollama") or {}
@@ -126,7 +126,7 @@ def ask_interactively(current: dict | None = None) -> dict:
     print("Kowalski OS setup — for each service choose: remote URL or skip.")
     print("(local install is not available yet; Enter keeps the current value)\n")
     for service in SERVICES:
-        default = _default_mode(service, current)
+        default = default_mode(service, current)
         mode = input(f"{service}: [r]emote / [s]kip? [{default}] ").strip().lower() or default
         if not mode.startswith("r"):
             raw[service] = {"mode": "skip"}
@@ -135,7 +135,7 @@ def ask_interactively(current: dict | None = None) -> dict:
             raw[service] = ask_ollama(current)
         else:
             raw[service] = ask_http_service(
-                service, current, default_host=_suggested_host(raw, current)
+                service, current, default_host=suggested_host(raw, current)
             )
 
     voice = ask_voice(current)
@@ -161,7 +161,7 @@ def ask_http_service(service: str, current: dict | None = None, default_host: st
     checker = check_stt if service == "stt" else check_tts
     while True:
         raw_url = input(
-            f"  {service} URL (host[:port], default port {port}){_hint(default_url)}: "
+            f"  {service} URL (host[:port], default port {port}){hint(default_url)}: "
         ).strip()
         url = normalize_url(raw_url or default_url, port)
         if not url:
@@ -176,7 +176,7 @@ def ask_http_service(service: str, current: dict | None = None, default_host: st
         if service == "stt":
             cur_lang = current.get("STT_LANGUAGE", "")
             language = input(
-                f"  language (ru/en/auto, optional){_hint(cur_lang)}: "
+                f"  language (ru/en/auto, optional){hint(cur_lang)}: "
             ).strip() or cur_lang
             if language:
                 entry["language"] = language
@@ -208,7 +208,7 @@ def ask_ollama(current: dict | None = None) -> dict:
     cur_model = current.get("OLLAMA_MODEL", "")
     entry: dict = {"mode": "remote"}
     while True:
-        raw_url = input(f"  ollama URL (host[:port], default port 11434){_hint(cur_url)}: ").strip()
+        raw_url = input(f"  ollama URL (host[:port], default port 11434){hint(cur_url)}: ").strip()
         url = normalize_ollama_url(raw_url or cur_url)
         if not url:
             print("  (please enter a URL)")
@@ -220,26 +220,26 @@ def ask_ollama(current: dict | None = None) -> dict:
             models = [m for m in result.detail.get("models", []) if m]
             print(f"  [OK] {url} — {result.latency_ms} ms, {len(models)} model(s)")
             entry["url"] = url
-            model = _choose_model(models, cur_model)
+            model = choose_model(models, cur_model)
             if model:
                 entry["model"] = model
             return entry
         print(f"  [unreachable] {url} — {result.error}")
         if input("  re-enter URL? [Y/n]: ").strip().lower().startswith("n"):
             entry["url"] = url
-            model = input(f"  model (type it, optional){_hint(cur_model)}: ").strip() or cur_model
+            model = input(f"  model (type it, optional){hint(cur_model)}: ").strip() or cur_model
             if model:
                 entry["model"] = model
             return entry
 
 
-def _choose_model(models: list[str], current: str = "") -> str:
+def choose_model(models: list[str], current: str = "") -> str:
     """Show the installed models and return the chosen name. Accepts a list
     number or a typed name; blank keeps the current model (or the server default
     when none is configured). The current model is flagged in the list."""
     if not models:
         print("  (no models installed on the server)")
-        return input(f"  model (type it, optional){_hint(current)}: ").strip() or current
+        return input(f"  model (type it, optional){hint(current)}: ").strip() or current
     print("  available models:")
     for index, name in enumerate(models, start=1):
         marker = "  (current)" if name == current else ""
@@ -264,7 +264,7 @@ def ask_voice(current: dict | None = None) -> dict:
     letter = {"push_to_talk": "p", "wake_word": "w", "both": "b"}.get(cur_mode, "")
     print("\nVoice activation (optional):")
     prompt = "  wake mode [p]ush-to-talk / [w]ake-word / [b]oth / [s]kip?"
-    choice = input(f"{prompt}{_hint(letter)} ").strip().lower()
+    choice = input(f"{prompt}{hint(letter)} ").strip().lower()
     if not choice or choice.startswith("s"):
         return {}  # leave the configured wake mode as-is
     mode = {"p": "push_to_talk", "w": "wake_word", "b": "both"}.get(choice[0])
@@ -298,11 +298,11 @@ def ask_mail(current: dict | None = None) -> dict:
     if not choice.startswith("y"):
         return {}
     while True:
-        imap_host = input(f"  IMAP host{_hint(current.get('IMAP_HOST', ''))}: ").strip() \
+        imap_host = input(f"  IMAP host{hint(current.get('IMAP_HOST', ''))}: ").strip() \
             or current.get("IMAP_HOST", "")
         imap_port = input(f"  IMAP port [{current.get('IMAP_PORT', '993')}]: ").strip() \
             or current.get("IMAP_PORT", "993")
-        imap_user = input(f"  IMAP user{_hint(current.get('IMAP_USER', ''))}: ").strip() \
+        imap_user = input(f"  IMAP user{hint(current.get('IMAP_USER', ''))}: ").strip() \
             or current.get("IMAP_USER", "")
         imap_password = getpass("  IMAP password (app-password for Gmail/Outlook; blank = keep): ").strip()
         imap_ssl = not input("  IMAP over SSL? [Y/n]: ").strip().lower().startswith("n")

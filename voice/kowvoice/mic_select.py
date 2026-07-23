@@ -24,18 +24,18 @@ def run(stdscr=None) -> int:
     import curses
 
     if stdscr is None:
-        return curses.wrapper(_loop) or 0
-    return _loop(stdscr) or 0
+        return curses.wrapper(run_loop) or 0
+    return run_loop(stdscr) or 0
 
 
-def _input_devices() -> list[tuple[int, str]]:
+def input_devices() -> list[tuple[int, str]]:
     import sounddevice as sd
 
     return [(i, d["name"]) for i, d in enumerate(sd.query_devices())
             if d.get("max_input_channels", 0) > 0]
 
 
-def _default_device_index(which: int) -> int | None:
+def default_device_index(which: int) -> int | None:
     """System default device index for input (which=0) or output (which=1)."""
     import sounddevice as sd
 
@@ -47,7 +47,7 @@ def _default_device_index(which: int) -> int | None:
         return None
 
 
-def _active_index(devices: list[tuple[int, str]], cur: str, default_idx: int | None) -> int:
+def active_index(devices: list[tuple[int, str]], cur: str, default_idx: int | None) -> int:
     """List position of the active device: the saved name, else the system default."""
     if cur:
         for k, (_i, n) in enumerate(devices):
@@ -60,19 +60,19 @@ def _active_index(devices: list[tuple[int, str]], cur: str, default_idx: int | N
     return -1
 
 
-def _current_name() -> str:
-    from .settings import _kowalski_conf_path, _parse_conf
+def current_name() -> str:
+    from .settings import kowalski_conf_path, parse_conf
 
-    return _parse_conf(_kowalski_conf_path()).get("KOW_VOICE_INPUT_DEVICE", "")
+    return parse_conf(kowalski_conf_path()).get("KOW_VOICE_INPUT_DEVICE", "")
 
 
-def _save(name: str) -> None:
+def save_choice(name: str) -> None:
     from kowalski.config import write_conf
 
     write_conf({"KOW_VOICE_INPUT_DEVICE": name})
 
 
-def _echo_test(stdscr, device: int) -> str:
+def echo_test(stdscr, device: int) -> str:
     """Record ~2 s from `device` and play it back on the default output."""
     import curses
 
@@ -81,10 +81,10 @@ def _echo_test(stdscr, device: int) -> str:
 
     try:
         sr = int(sd.query_devices(device)["default_samplerate"]) or 44100
-        _put(stdscr, "● recording 2 s — speak now…")
+        put_line(stdscr, "● recording 2 s — speak now…")
         rec = sd.rec(int(2 * sr), samplerate=sr, channels=1, device=device, dtype="float32")
         sd.wait()
-        _put(stdscr, "▶ playing back…")
+        put_line(stdscr, "▶ playing back…")
         sd.play(rec, sr)
         sd.wait()
         return "echo test done"
@@ -97,7 +97,7 @@ def _echo_test(stdscr, device: int) -> str:
             pass
 
 
-def _put(stdscr, msg: str) -> None:
+def put_line(stdscr, msg: str) -> None:
     import curses
 
     try:
@@ -107,7 +107,7 @@ def _put(stdscr, msg: str) -> None:
         pass
 
 
-def _loop(stdscr) -> int:
+def run_loop(stdscr) -> int:
     import curses
 
     import numpy as np
@@ -116,14 +116,14 @@ def _loop(stdscr) -> int:
     curses.curs_set(0)
     stdscr.timeout(60)  # ~16 fps meter refresh; getch returns -1 when idle
 
-    devices = _input_devices()
+    devices = input_devices()
     if not devices:
         stdscr.addstr(0, 2, "no input devices found — press a key")
         stdscr.timeout(-1)
         stdscr.getch()
         return 1
 
-    cur = _current_name()
+    cur = current_name()
     sel = next((k for k, (_, n) in enumerate(devices) if cur and cur in n), 0)
     level = [0.0]
     stream = {"s": None}
@@ -157,33 +157,33 @@ def _loop(stdscr) -> int:
             stream["s"] = None
             return f"cannot open device: {exc}"
 
-    default_in = _default_device_index(0)
+    default_in = default_device_index(0)
     status = open_stream(devices[sel][0])
     try:
         while True:
             stdscr.erase()
-            _safe(stdscr, 0, 2, "Select microphone", curses.A_BOLD)
-            _safe(stdscr, 1, 2,
+            safe_addstr(stdscr, 0, 2, "Select microphone", curses.A_BOLD)
+            safe_addstr(stdscr, 1, 2,
                   "↑/↓ choose · e echo test · Enter/s save · q quit   (● = current)",
                   curses.A_DIM)
-            active = _active_index(devices, cur, default_in)
+            active = active_index(devices, cur, default_in)
             for k, (i, n) in enumerate(devices):
                 dot = "●" if k == active else " "
                 attr = curses.A_REVERSE if k == sel else 0
-                _safe(stdscr, 3 + k, 2, f"{dot} [{i:>2}] {n[:58]}", attr)
+                safe_addstr(stdscr, 3 + k, 2, f"{dot} [{i:>2}] {n[:58]}", attr)
             row = 4 + len(devices)
             filled = int(min(1.0, level[0] * 15) * BAR_WIDTH)
-            _safe(stdscr, row, 2, "level  " + "█" * filled + "·" * (BAR_WIDTH - filled))
-            _safe(stdscr, row + 1, 2, "speak — the bar should move", curses.A_DIM)
+            safe_addstr(stdscr, row, 2, "level  " + "█" * filled + "·" * (BAR_WIDTH - filled))
+            safe_addstr(stdscr, row + 1, 2, "speak — the bar should move", curses.A_DIM)
             if cur:
                 cur_name = cur
             elif active >= 0:
                 cur_name = f"{devices[active][1]} (system default)"
             else:
                 cur_name = "system default"
-            _safe(stdscr, row + 3, 2, "current: " + cur_name, curses.A_DIM)
+            safe_addstr(stdscr, row + 3, 2, "current: " + cur_name, curses.A_DIM)
             if status:
-                _safe(stdscr, row + 4, 2, status, curses.A_DIM)
+                safe_addstr(stdscr, row + 4, 2, status, curses.A_DIM)
             stdscr.refresh()
 
             ch = stdscr.getch()
@@ -196,19 +196,19 @@ def _loop(stdscr) -> int:
                 sel = (sel + 1) % len(devices)
                 status = open_stream(devices[sel][0])
             elif ch in (ord("s"), curses.KEY_ENTER, 10, 13):
-                _save(devices[sel][1])
+                save_choice(devices[sel][1])
                 cur = devices[sel][1]
                 status = f"✓ saved to config: {devices[sel][1][:40]}"
             elif ch == ord("e"):
                 close_stream()  # free the device for record/playback
-                status = _echo_test(stdscr, devices[sel][0])
+                status = echo_test(stdscr, devices[sel][0])
                 open_stream(devices[sel][0])
     finally:
         close_stream()
     return 0
 
 
-def _safe(stdscr, y: int, x: int, text: str, attr: int = 0) -> None:
+def safe_addstr(stdscr, y: int, x: int, text: str, attr: int = 0) -> None:
     import curses
 
     try:

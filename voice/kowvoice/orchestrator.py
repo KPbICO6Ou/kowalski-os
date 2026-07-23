@@ -60,73 +60,73 @@ class VoiceOrchestrator:
         self.interrupter = interrupter
         self.settings = settings
         self.on_event = on_event
-        self._state = VoiceState.IDLE
-        self._stop = asyncio.Event()
+        self.current_state = VoiceState.IDLE
+        self.stop_event = asyncio.Event()
 
     # -- public API -----------------------------------------------------------
 
     @property
     def state(self) -> VoiceState:
-        return self._state
+        return self.current_state
 
     def stop(self) -> None:
-        self._stop.set()
+        self.stop_event.set()
 
     async def run(self) -> None:
         """Loop wake->turn cycles until stop() is called."""
-        self._emit("ready", state=VoiceState.IDLE)
-        while not self._stop.is_set():
+        self.emit("ready", state=VoiceState.IDLE)
+        while not self.stop_event.is_set():
             try:
                 await self.run_once()
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # one failed turn must not kill the loop
                 log.exception("voice turn failed")
-                self._emit("error", text=str(exc))
+                self.emit("error", text=str(exc))
 
     async def run_once(self) -> None:
         """One full wake -> answer cycle (used by `kow-voice demo` and tests)."""
-        self._emit("state", state=VoiceState.IDLE)
+        self.emit("state", state=VoiceState.IDLE)
         await self.wake.wait_for_wake()
-        if self._stop.is_set():
+        if self.stop_event.is_set():
             return
-        await self._handle_turn()
-        self._emit("state", state=VoiceState.IDLE)
+        await self.handle_turn()
+        self.emit("state", state=VoiceState.IDLE)
 
     # -- internals ------------------------------------------------------------
 
-    async def _handle_turn(self) -> None:
+    async def handle_turn(self) -> None:
         from .cues import play_listen_cue
 
         await play_listen_cue(self.sink, self.settings)  # earcon: wake fired, listening
         while True:
-            self._emit("state", state=VoiceState.LISTENING)
+            self.emit("state", state=VoiceState.LISTENING)
             utterance = await self.recorder.record_utterance()
             if utterance is None or utterance.is_empty:
-                self._emit("no_speech", state=VoiceState.IDLE)
+                self.emit("no_speech", state=VoiceState.IDLE)
                 return
 
-            self._emit("state", state=VoiceState.TRANSCRIBING)
+            self.emit("state", state=VoiceState.TRANSCRIBING)
             transcript = await self.stt.transcribe(
                 utterance, language=self.settings.stt_language or None
             )
             if not transcript.text.strip():
-                self._emit("no_speech", state=VoiceState.IDLE)
+                self.emit("no_speech", state=VoiceState.IDLE)
                 return
-            self._emit("transcript", state=VoiceState.TRANSCRIBING, text=transcript.text)
+            self.emit("transcript", state=VoiceState.TRANSCRIBING, text=transcript.text)
 
-            barged = await self._respond(transcript.text)
+            barged = await self.respond(transcript.text)
             if barged:
                 continue  # user interrupted -> capture the new utterance
             return
 
-    async def _respond(self, text: str) -> bool:
+    async def respond(self, text: str) -> bool:
         """Stream the answer and speak it. Returns True if the user barged in."""
         if not self.settings.barge_in:
-            await self._stream_and_speak(text)
+            await self.stream_and_speak(text)
             return False
 
-        speak_task = asyncio.create_task(self._stream_and_speak(text))
+        speak_task = asyncio.create_task(self.stream_and_speak(text))
         barge_task = asyncio.create_task(self.interrupter.wait_for_barge_in())
         done, _ = await asyncio.wait(
             {speak_task, barge_task}, return_when=asyncio.FIRST_COMPLETED
@@ -137,7 +137,7 @@ class VoiceOrchestrator:
             with contextlib.suppress(asyncio.CancelledError):
                 await speak_task
             await self.sink.stop()
-            self._emit("barge_in", state=VoiceState.LISTENING)
+            self.emit("barge_in", state=VoiceState.LISTENING)
             return True
 
         barge_task.cancel()
@@ -145,37 +145,37 @@ class VoiceOrchestrator:
             await barge_task
         return False
 
-    async def _stream_and_speak(self, text: str) -> None:
+    async def stream_and_speak(self, text: str) -> None:
         segmenter = SentenceSegmenter()
         spoken_anything = False
         answer_parts: list[str] = []
-        self._emit("state", state=VoiceState.THINKING)
+        self.emit("state", state=VoiceState.THINKING)
 
         async for delta in self.agent.ask(text):
             answer_parts.append(delta)
             for sentence in segmenter.feed(delta):
-                spoken_anything = self._enter_speaking(spoken_anything)
-                await self._speak_sentence(sentence)
+                spoken_anything = self.enter_speaking(spoken_anything)
+                await self.speak_sentence(sentence)
 
         tail = segmenter.flush()
         if tail:
-            self._enter_speaking(spoken_anything)
-            await self._speak_sentence(tail)
+            self.enter_speaking(spoken_anything)
+            await self.speak_sentence(tail)
 
-        self._emit("answer", state=VoiceState.SPEAKING, text="".join(answer_parts).strip())
+        self.emit("answer", state=VoiceState.SPEAKING, text="".join(answer_parts).strip())
 
-    def _enter_speaking(self, already: bool) -> bool:
+    def enter_speaking(self, already: bool) -> bool:
         if not already:
-            self._emit("state", state=VoiceState.SPEAKING)
+            self.emit("state", state=VoiceState.SPEAKING)
         return True
 
-    async def _speak_sentence(self, sentence: str) -> None:
-        self._emit("speak", state=VoiceState.SPEAKING, text=sentence)
+    async def speak_sentence(self, sentence: str) -> None:
+        self.emit("speak", state=VoiceState.SPEAKING, text=sentence)
         clip = await self.tts.synthesize(sentence)
         await self.sink.play(clip)
 
-    def _emit(self, kind: str, *, state: VoiceState | None = None, text: str | None = None) -> None:
+    def emit(self, kind: str, *, state: VoiceState | None = None, text: str | None = None) -> None:
         if state is not None:
-            self._state = state
+            self.current_state = state
         if self.on_event is not None:
-            self.on_event(VoiceEvent(kind=kind, state=self._state, text=text))
+            self.on_event(VoiceEvent(kind=kind, state=self.current_state, text=text))

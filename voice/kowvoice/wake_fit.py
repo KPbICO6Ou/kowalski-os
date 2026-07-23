@@ -20,7 +20,7 @@ WIN = 16          # embedding frames the model sees ([WIN, 96])
 BUF_SAMPLES = 35200   # ~2.2 s @ 16 kHz -> >= WIN frames from embed_clips
 
 
-def _load_wavs(folder: Path):
+def load_wavs(folder: Path):
     import wave
 
     import numpy as np
@@ -36,7 +36,7 @@ def _load_wavs(folder: Path):
     return clips
 
 
-def _augment(word, noises, rng):
+def augment_clip(word, noises, rng):
     """One augmented 16-bit buffer: speed/gain-perturbed word placed at a random
     offset in a BUF_SAMPLES window, with optional additive noise at a random SNR."""
     import numpy as np
@@ -61,7 +61,7 @@ def _augment(word, noises, rng):
     return np.clip(buf, -32768, 32767).astype(np.int16)
 
 
-def _net(layer_dim: int = 128):
+def build_net(layer_dim: int = 128):
     import torch.nn as nn
 
     class Net(nn.Module):
@@ -144,14 +144,14 @@ def run_fit(phrase: str, *, augment: int = 80, neg_count: int = 6000,
         return 2
 
     from .settings import VoiceSettings
-    from .train import _merge_conf, model_path_for, slugify
+    from .train import merge_conf, model_path_for, slugify
     from .wake_record import samples_dir
 
     torch.manual_seed(0)  # reproducible training (augmentation rng is seeded too)
     settings = settings or VoiceSettings.load()
     slug = slugify(phrase)
-    pos_clips = _load_wavs(samples_dir(slug) / "positive")
-    user_neg = _load_wavs(samples_dir(slug) / "negative")
+    pos_clips = load_wavs(samples_dir(slug) / "positive")
+    user_neg = load_wavs(samples_dir(slug) / "negative")
     if len(pos_clips) < 5:
         print(f"need at least 5 positive recordings — found {len(pos_clips)}. "
               f"run: kow-voice wake-record {phrase}", file=sys.stderr)
@@ -170,7 +170,7 @@ def run_fit(phrase: str, *, augment: int = 80, neg_count: int = 6000,
 
     # Positives: each recording -> `augment` randomly-placed/noised buffers.
     print(f"augmenting + embedding positives (x{augment})…")
-    aug = [_augment(w, user_neg, rng) for w in pos_clips for _ in range(augment)]
+    aug = [augment_clip(w, user_neg, rng) for w in pos_clips for _ in range(augment)]
     pos = windows(aug)
 
     # Negatives = a big bank of generic real negative frames + the user's OWN
@@ -187,7 +187,7 @@ def run_fit(phrase: str, *, augment: int = 80, neg_count: int = 6000,
     generic = np.stack([np.asarray(negfeat[s:s + WIN]) for s in starts]).astype(np.float32)
     if user_neg:
         print(f"augmenting + embedding user (hard) negatives (x{augment})…")
-        hard = windows([_augment(n, user_neg, rng) for n in user_neg for _ in range(augment)])
+        hard = windows([augment_clip(n, user_neg, rng) for n in user_neg for _ in range(augment)])
     else:
         hard = np.zeros((0, WIN, 96), dtype=np.float32)
 
@@ -201,7 +201,7 @@ def run_fit(phrase: str, *, augment: int = 80, neg_count: int = 6000,
     nval = len(X) // 5
     Xtr, ytr, wtr, Xval, yval = X[nval:], y[nval:], w[nval:], X[:nval], y[:nval]
 
-    net = _net()
+    net = build_net()
     loss_fn = torch.nn.BCELoss(reduction="none")
     opt = torch.optim.Adam(net.parameters(), lr=1e-3)
     for ep in range(epochs):
@@ -247,7 +247,7 @@ def run_fit(phrase: str, *, augment: int = 80, neg_count: int = 6000,
     except Exception as exc:
         print(f"  (skipped real-recording verify: {type(exc).__name__}: {exc})")
 
-    _merge_conf({"KOW_WAKE_MODEL": str(dest), "KOW_WAKE_WORD": slug,
+    merge_conf({"KOW_WAKE_MODEL": str(dest), "KOW_WAKE_WORD": slug,
                  "KOW_WAKE_THRESHOLD": f"{thr:.2f}"}, None)
     print(f"registered: {dest}\n"
           f"(KOW_WAKE_MODEL set, KOW_WAKE_THRESHOLD={thr:.2f}, wake mode = both) — "

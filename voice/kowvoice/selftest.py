@@ -15,7 +15,7 @@ CYAN = "\033[36m"   # TTS lines
 GREEN = "\033[32m"  # STT lines
 
 
-def _device_label(configured: str, which: int) -> str:
+def device_label(configured: str, which: int) -> str:
     """Human name of the device in use: the configured one, else the system
     default (which=0 input, 1 output). Best-effort; never raises."""
     if configured:
@@ -47,11 +47,11 @@ PHRASES = {
 }
 
 
-def _phrases(language: str) -> dict[str, str]:
+def phrases(language: str) -> dict[str, str]:
     return PHRASES.get((language or "en").split("-")[0].lower(), PHRASES["en"])
 
 
-def _real_components(settings):
+def real_components(settings):
     from .audio_devices import EnergyVadRecorder, SoundDeviceSink
     from .stt_http import HttpSttClient
     from .tts_http import HttpTtsClient
@@ -65,7 +65,7 @@ def _real_components(settings):
     )
 
 
-async def _probe(settings) -> list[str]:
+async def probe(settings) -> list[str]:
     """STT / TTS / kow-core connectivity, one line each."""
     import asyncio
 
@@ -94,14 +94,14 @@ async def _probe(settings) -> list[str]:
     return lines
 
 
-async def _llm_diagnose(llm, prompt: str) -> str:
+async def llm_diagnose(llm, prompt: str) -> str:
     parts: list[str] = []
     async for chunk in llm.chat([{"role": "user", "content": prompt}], []):
         parts.append(chunk.content_delta)
     return "".join(parts).strip()
 
 
-def _diag_prompt(settings, problem: str, checks: list[str]) -> str:
+def diag_prompt(settings, problem: str, checks: list[str]) -> str:
     return (
         "You are diagnosing a voice-assistant self-test failure on Kowalski OS "
         "(local STT/TTS HTTP services + an Ollama-backed agent over a unix socket).\n"
@@ -117,7 +117,7 @@ def _diag_prompt(settings, problem: str, checks: list[str]) -> str:
     )
 
 
-async def _diagnose(settings, problem, llm, probe_fn, on_text) -> int:
+async def diagnose(settings, problem, llm, probe_fn, on_text) -> int:
     on_text(f"\n⚠ {problem}")
     checks = await probe_fn(settings)
     on_text("diagnostics:")
@@ -130,7 +130,7 @@ async def _diagnose(settings, problem, llm, probe_fn, on_text) -> int:
 
             llm = build_llm(Config.load())
         on_text(f"{DIM}asking the LLM to diagnose…{RESET}")
-        answer = await _llm_diagnose(llm, _diag_prompt(settings, problem, checks))
+        answer = await llm_diagnose(llm, diag_prompt(settings, problem, checks))
         on_text("\nLLM diagnosis:\n" + answer)
     except Exception as exc:
         on_text(f"(LLM diagnosis unavailable: {exc})")
@@ -145,7 +145,7 @@ async def run_test(
     tts=None,
     sink=None,
     llm=None,
-    probe_fn=_probe,
+    probe_fn=probe,
     on_text=print,
 ) -> int:
     """Run the round-trip self-test. Returns 0 on success, 1 on a diagnosed
@@ -154,22 +154,22 @@ async def run_test(
         from .settings import VoiceSettings
 
         settings = VoiceSettings.load()
-    phrases = _phrases(settings.stt_language)
+    speech = phrases(settings.stt_language)
 
     real_used = None in (recorder, stt, tts, sink)
     if real_used:
         try:
-            real = _real_components(settings)
+            real = real_components(settings)
         except Exception as exc:
-            return await _diagnose(settings, f"could not initialise the voice stack: {exc}",
+            return await diagnose(settings, f"could not initialise the voice stack: {exc}",
                                    llm, probe_fn, on_text)
         recorder = recorder or real[0]
         stt = stt or real[1]
         tts = tts or real[2]
         sink = sink or real[3]
 
-    mic = _device_label(settings.input_device, 0) if real_used else (settings.input_device or "mock")
-    spk = _device_label(settings.output_device, 1) if real_used else (settings.output_device or "mock")
+    mic = device_label(settings.input_device, 0) if real_used else (settings.input_device or "mock")
+    spk = device_label(settings.output_device, 1) if real_used else (settings.output_device or "mock")
 
     import sys
     import time
@@ -194,15 +194,15 @@ async def run_test(
     try:
         on_text(f"{DIM}SYS › mic: {mic}  ·  speaker: {spk}{RESET}")
         on_text(f"{DIM}SYS › say a short phrase after the greeting — it gets echoed back{RESET}")
-        await say(phrases["greet"])
+        await say(speech["greet"])
         on_text(f"{DIM}SYS › listening… speak now (mic: {mic}){RESET}")
         utterance = await recorder.record_utterance(on_level=on_level)
         if sys.stdout.isatty():
             sys.stdout.write("\r" + " " * 60 + "\r")  # clear the live meter line
             sys.stdout.flush()
         if utterance is None or utterance.is_empty:
-            await say(phrases["nospeech"])
-            return await _diagnose(settings, "no speech captured from the microphone",
+            await say(speech["nospeech"])
+            return await diagnose(settings, "no speech captured from the microphone",
                                    llm, probe_fn, on_text)
         on_text(f"{DIM}SYS › recorded — transcribing…{RESET}")
         t0 = time.monotonic()
@@ -210,14 +210,14 @@ async def run_test(
         stt_s = time.monotonic() - t0
         text = (transcript.text or "").strip()
         if not text:
-            await say(phrases["nospeech"])
-            return await _diagnose(settings, "STT returned an empty transcript",
+            await say(speech["nospeech"])
+            return await diagnose(settings, "STT returned an empty transcript",
                                    llm, probe_fn, on_text)
         on_text(f"{GREEN}STT{RESET} › {text}  {DIM}({stt_s:.1f}s){RESET}")
-        await say(phrases["echo"].format(text=text))
-        await say(phrases["done"])
+        await say(speech["echo"].format(text=text))
+        await say(speech["done"])
         on_text(f"{DIM}SYS ✓ voice round-trip OK{RESET}")
         return 0
     except Exception as exc:
-        return await _diagnose(settings, f"voice round-trip failed: {exc}",
+        return await diagnose(settings, f"voice round-trip failed: {exc}",
                                llm, probe_fn, on_text)

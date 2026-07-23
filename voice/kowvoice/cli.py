@@ -36,7 +36,7 @@ ICONS = {
 }
 
 
-def _print_event(event: VoiceEvent) -> None:
+def print_event(event: VoiceEvent) -> None:
     if event.kind == "state":
         print(f"  [{event.state}] {ICONS.get(event.state, '')}")
     elif event.kind == "ready":
@@ -243,14 +243,14 @@ async def cmd_demo(barge_in: bool) -> int:
         sink=MockAudioSink(),
         interrupter=interrupter,
         settings=settings,
-        on_event=_print_event,
+        on_event=print_event,
     )
     await orchestrator.run_once()
     print("demo complete")
     return 0
 
 
-def _build_real_pipeline(settings: VoiceSettings):
+def build_real_pipeline(settings: VoiceSettings):
     from .agent_socket import SocketAgentSession
     from .audio_devices import EnergyVadRecorder, SoundDeviceSink, build_wake
     from .mocks import MockInterrupter  # barge-in mic monitor is a future upgrade
@@ -269,7 +269,7 @@ def _build_real_pipeline(settings: VoiceSettings):
         sink=SoundDeviceSink(device=settings.output_device),
         interrupter=MockInterrupter(),
         settings=VoiceSettings(**{**settings.__dict__, "barge_in": False}),
-        on_event=_print_event,
+        on_event=print_event,
     )
 
 
@@ -292,7 +292,7 @@ async def cmd_run() -> int:
             )
             return 2
     try:
-        orchestrator = _build_real_pipeline(settings)
+        orchestrator = build_real_pipeline(settings)
     except ImportError as exc:
         print(
             f"voice hardware stack unavailable ({exc}). "

@@ -11,7 +11,7 @@ import shutil
 import subprocess
 
 
-def _process_chain(limit: int = 6) -> list[str]:
+def process_chain(limit: int = 6) -> list[str]:
     """This PID and its ancestors (the terminal is usually a parent), as strings."""
     pids: list[str] = []
     pid = os.getpid()
@@ -27,14 +27,14 @@ def _process_chain(limit: int = 6) -> list[str]:
     return pids
 
 
-def _own_window_id_hex() -> str | None:
+def own_window_id_hex() -> str | None:
     """The X11 window id (0x-hex) of the terminal hosting this process, or None.
     Tries $WINDOWID (xterm-style), then matches our process chain in `wmctrl -lp`."""
     wid = os.environ.get("WINDOWID", "").strip()
     if wid.isdigit() and int(wid) > 0:
         return f"0x{int(wid):08x}"
     if shutil.which("wmctrl"):
-        pids = set(_process_chain())
+        pids = set(process_chain())
         try:
             out = subprocess.run(["wmctrl", "-lp"], capture_output=True, text=True,
                                   timeout=2, check=False).stdout
@@ -54,7 +54,7 @@ def raise_own_window() -> bool:
     if not os.environ.get("DISPLAY"):
         return False
     if shutil.which("wmctrl"):
-        wid = _own_window_id_hex()
+        wid = own_window_id_hex()
         if wid:
             try:
                 subprocess.run(["wmctrl", "-i", "-a", wid], timeout=2, check=False)
@@ -62,7 +62,7 @@ def raise_own_window() -> bool:
             except Exception:
                 pass
     if shutil.which("xdotool"):
-        for pid in _process_chain():
+        for pid in process_chain():
             try:
                 result = subprocess.run(
                     ["xdotool", "search", "--pid", pid, "windowactivate"],

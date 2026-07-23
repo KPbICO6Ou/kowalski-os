@@ -48,7 +48,7 @@ def build_spec(phrase: str, **overrides) -> dict:
         "phrase": phrase.strip(),
         "slug": slug,
         "model_name": slug,
-        "negatives": _default_negatives(phrase),
+        "negatives": default_negatives(phrase),
         "trainer_repo": TRAINER_REPO,
     }
     for key, value in DEFAULTS.items():
@@ -60,7 +60,7 @@ def build_spec(phrase: str, **overrides) -> dict:
     return spec
 
 
-def _default_negatives(phrase: str) -> list[str]:
+def default_negatives(phrase: str) -> list[str]:
     """Near-miss phrases the model should explicitly reject (cut false fires)."""
     base = phrase.strip().lower()
     near = {"kowalski": ["kowabunga", "kovalski", "kowalsky", "koala", "wciski"]}
@@ -368,7 +368,7 @@ def render_readme(spec: dict) -> str:
     )
 
 
-def _normalize(ti: tarfile.TarInfo) -> tarfile.TarInfo:
+def normalize_tarinfo(ti: tarfile.TarInfo) -> tarfile.TarInfo:
     """Strip every nondeterministic field from a tar entry (mtime, owner, and the
     umask-dependent mode) so the archive is reproducible across runs and boxes."""
     ti.mtime = 0
@@ -388,9 +388,9 @@ def write_targz(tar_path: Path, bundle: Path, names: list[str]) -> None:
     with open(tar_path, "wb") as raw:
         with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
             with tarfile.open(fileobj=gz, mode="w") as tar:
-                tar.add(bundle, arcname=bundle.name, recursive=False, filter=_normalize)
+                tar.add(bundle, arcname=bundle.name, recursive=False, filter=normalize_tarinfo)
                 for name in sorted(names):
-                    tar.add(bundle / name, arcname=f"{bundle.name}/{name}", filter=_normalize)
+                    tar.add(bundle / name, arcname=f"{bundle.name}/{name}", filter=normalize_tarinfo)
 
 
 def write_bundle(phrase: str, *, out_dir: Path | None = None, archive: bool = True,

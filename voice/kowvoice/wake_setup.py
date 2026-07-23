@@ -9,7 +9,7 @@ from __future__ import annotations
 import sys
 
 
-def _confirm(prompt: str, *, assume_yes: bool = False, default_yes: bool = True) -> bool:
+def confirm(prompt: str, *, assume_yes: bool = False, default_yes: bool = True) -> bool:
     """Ask a [Y/n] question on a tty. Non-interactive (no tty) or assume_yes -> the
     default; a bare Enter -> the default."""
     if assume_yes or not sys.stdin.isatty():
@@ -25,7 +25,7 @@ def _confirm(prompt: str, *, assume_yes: bool = False, default_yes: bool = True)
     return answer in ("y", "yes", "д", "да")
 
 
-def _count(folder) -> int:
+def count_wavs(folder) -> int:
     return len(list(folder.glob("*.wav"))) if folder.exists() else 0
 
 
@@ -39,8 +39,8 @@ async def run_setup(phrase: str, *, count: int = 30, negatives: int = 12,
 
     slug = slugify(phrase)
     base = samples_dir(slug)
-    n_pos = _count(base / "positive")
-    n_neg = _count(base / "negative")
+    n_pos = count_wavs(base / "positive")
+    n_neg = count_wavs(base / "negative")
 
     print(f"Wake word setup for '{phrase}'.")
 
@@ -54,7 +54,7 @@ async def run_setup(phrase: str, *, count: int = 30, negatives: int = 12,
     else:
         complete = n_pos >= count and n_neg >= negatives
         reuse = complete and not rerecord and (
-            yes or _confirm(f"Step 1/3 — found {n_pos} positives + {n_neg} negatives. Reuse them?"))
+            yes or confirm(f"Step 1/3 — found {n_pos} positives + {n_neg} negatives. Reuse them?"))
         if reuse:
             print(f"Step 1/3 — reusing {n_pos} positives + {n_neg} negatives.")
         else:
@@ -62,7 +62,7 @@ async def run_setup(phrase: str, *, count: int = 30, negatives: int = 12,
             rc = await run_record(phrase, count=count, negatives=negatives)
             if rc != 0:
                 return rc
-            if _count(base / "positive") < 5:
+            if count_wavs(base / "positive") < 5:
                 print("not enough recordings to train — run again and record more.",
                       file=sys.stderr)
                 return 2
@@ -82,7 +82,7 @@ async def run_setup(phrase: str, *, count: int = 30, negatives: int = 12,
     if no_test or yes or not sys.stdin.isatty():
         print("  test it any time with: kow-voice wake-test")
         return 0
-    if _confirm("Test it live now?"):
+    if confirm("Test it live now?"):
         from .wake_test import run_wake_test
 
         try:

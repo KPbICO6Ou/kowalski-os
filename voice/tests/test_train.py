@@ -66,7 +66,7 @@ def test_custom_phrase_without_model_guides(tmp_path):
 def test_merge_conf_preserves_other_keys(tmp_path):
     conf = _conf(tmp_path)
     conf.write_text("STT_URL=http://10.0.0.5:5051\nKOW_WAKE_MODE=push_to_talk\n")
-    train._merge_conf({"KOW_WAKE_MODEL": "/m/k.onnx"}, conf)
+    train.merge_conf({"KOW_WAKE_MODEL": "/m/k.onnx"}, conf)
     body = conf.read_text()
     assert "STT_URL=http://10.0.0.5:5051" in body  # untouched
     assert "KOW_WAKE_MODEL=/m/k.onnx" in body

@@ -7,25 +7,25 @@ from kow_setup import cli
 from kow_setup.checks import CheckResult
 
 
-def _inputs(seq):
+def make_inputs(seq):
     it = iter(seq)
     return lambda prompt="": next(it)
 
 
 def test_default_mode_from_current_config():
-    assert cli._default_mode("ollama", {"OLLAMA_HOST": "http://h:11434"}) == "r"
-    assert cli._default_mode("stt", {}) == "s"
-    assert cli._default_mode("tts", {"TTS_URL": "http://h:5000"}) == "r"
+    assert cli.default_mode("ollama", {"OLLAMA_HOST": "http://h:11434"}) == "r"
+    assert cli.default_mode("stt", {}) == "s"
+    assert cli.default_mode("tts", {"TTS_URL": "http://h:5000"}) == "r"
 
 
 def test_choose_model_by_number(monkeypatch):
-    monkeypatch.setattr(builtins, "input", _inputs(["2"]))
-    assert cli._choose_model(["a", "b", "c"]) == "b"
+    monkeypatch.setattr(builtins, "input", make_inputs(["2"]))
+    assert cli.choose_model(["a", "b", "c"]) == "b"
 
 
 def test_choose_model_blank_keeps_current(monkeypatch):
-    monkeypatch.setattr(builtins, "input", _inputs([""]))
-    assert cli._choose_model(["a", "qwen3:8b"], current="qwen3:8b") == "qwen3:8b"
+    monkeypatch.setattr(builtins, "input", make_inputs([""]))
+    assert cli.choose_model(["a", "qwen3:8b"], current="qwen3:8b") == "qwen3:8b"
 
 
 def test_choose_model_prompt_shows_current_name(monkeypatch):
@@ -36,28 +36,28 @@ def test_choose_model_prompt_shows_current_name(monkeypatch):
         return ""
 
     monkeypatch.setattr(builtins, "input", recording_input)
-    cli._choose_model(["a", "qwen3:8b"], current="qwen3:8b")
+    cli.choose_model(["a", "qwen3:8b"], current="qwen3:8b")
     assert "keep current (qwen3:8b)" in seen[-1]
 
 
 def test_choose_model_blank_is_server_default(monkeypatch):
-    monkeypatch.setattr(builtins, "input", _inputs([""]))
-    assert cli._choose_model(["a", "b"]) == ""
+    monkeypatch.setattr(builtins, "input", make_inputs([""]))
+    assert cli.choose_model(["a", "b"]) == ""
 
 
 def test_choose_model_by_name(monkeypatch):
-    monkeypatch.setattr(builtins, "input", _inputs(["qwen3:8b"]))
-    assert cli._choose_model(["a", "b"]) == "qwen3:8b"
+    monkeypatch.setattr(builtins, "input", make_inputs(["qwen3:8b"]))
+    assert cli.choose_model(["a", "b"]) == "qwen3:8b"
 
 
 def test_choose_model_out_of_range_used_literally(monkeypatch):
-    monkeypatch.setattr(builtins, "input", _inputs(["9"]))
-    assert cli._choose_model(["a", "b"]) == "9"
+    monkeypatch.setattr(builtins, "input", make_inputs(["9"]))
+    assert cli.choose_model(["a", "b"]) == "9"
 
 
 def test_choose_model_no_models_falls_back_to_typing(monkeypatch):
-    monkeypatch.setattr(builtins, "input", _inputs(["typed:model"]))
-    assert cli._choose_model([]) == "typed:model"
+    monkeypatch.setattr(builtins, "input", make_inputs(["typed:model"]))
+    assert cli.choose_model([]) == "typed:model"
 
 
 @patch("kow_setup.checks.check_ollama")
@@ -65,7 +65,7 @@ def test_ask_ollama_probes_normalizes_and_lists(mock_check, monkeypatch):
     mock_check.return_value = CheckResult(
         service="ollama", ok=True, latency_ms=3, detail={"models": ["qwen3:8b", "qwen3:30b"]}
     )
-    monkeypatch.setattr(builtins, "input", _inputs(["10.16.69.251", "1"]))
+    monkeypatch.setattr(builtins, "input", make_inputs(["10.16.69.251", "1"]))
     entry = cli.ask_ollama()
     assert entry == {"mode": "remote", "url": "http://10.16.69.251:11434", "model": "qwen3:8b"}
     mock_check.assert_called_once_with("http://10.16.69.251:11434")
@@ -76,7 +76,7 @@ def test_ask_ollama_keeps_explicit_port(mock_check, monkeypatch):
     mock_check.return_value = CheckResult(
         service="ollama", ok=True, latency_ms=1, detail={"models": ["m"]}
     )
-    monkeypatch.setattr(builtins, "input", _inputs(["127.0.0.1:12345", ""]))
+    monkeypatch.setattr(builtins, "input", make_inputs(["127.0.0.1:12345", ""]))
     entry = cli.ask_ollama()
     assert entry["url"] == "http://127.0.0.1:12345"
     assert "model" not in entry  # blank -> server default
@@ -89,7 +89,7 @@ def test_ask_ollama_retries_then_succeeds(mock_check, monkeypatch):
         CheckResult(service="ollama", ok=True, latency_ms=2, detail={"models": ["qwen3:8b"]}),
     ]
     # bad URL, accept re-entry (blank=Y), good URL, pick #1
-    monkeypatch.setattr(builtins, "input", _inputs(["badhost", "", "10.0.0.9", "1"]))
+    monkeypatch.setattr(builtins, "input", make_inputs(["badhost", "", "10.0.0.9", "1"]))
     entry = cli.ask_ollama()
     assert entry["url"] == "http://10.0.0.9:11434"
     assert entry["model"] == "qwen3:8b"
@@ -100,7 +100,7 @@ def test_ask_ollama_retries_then_succeeds(mock_check, monkeypatch):
 def test_ask_ollama_unreachable_then_skip_retry(mock_check, monkeypatch):
     mock_check.return_value = CheckResult(service="ollama", ok=False, error="refused")
     # unreachable, decline re-entry, type a model manually
-    monkeypatch.setattr(builtins, "input", _inputs(["badhost", "n", "qwen3:8b"]))
+    monkeypatch.setattr(builtins, "input", make_inputs(["badhost", "n", "qwen3:8b"]))
     entry = cli.ask_ollama()
     assert entry == {"mode": "remote", "url": "http://badhost:11434", "model": "qwen3:8b"}
 
@@ -112,7 +112,7 @@ def test_ask_ollama_blank_keeps_current_url_and_model(mock_check, monkeypatch):
     )
     current = {"OLLAMA_HOST": "http://10.0.0.9:11434", "OLLAMA_MODEL": "qwen3:8b"}
     # blank URL -> keep current; blank model choice -> keep current
-    monkeypatch.setattr(builtins, "input", _inputs(["", ""]))
+    monkeypatch.setattr(builtins, "input", make_inputs(["", ""]))
     entry = cli.ask_ollama(current)
     assert entry == {"mode": "remote", "url": "http://10.0.0.9:11434", "model": "qwen3:8b"}
     mock_check.assert_called_once_with("http://10.0.0.9:11434")
@@ -122,7 +122,7 @@ def test_ask_ollama_blank_keeps_current_url_and_model(mock_check, monkeypatch):
 def test_ask_http_service_normalizes_schemeless_url(mock_stt, monkeypatch):
     # The reported bug: 'host:port' with no scheme must become a valid http URL.
     mock_stt.return_value = CheckResult(service="stt", ok=True, latency_ms=5)
-    monkeypatch.setattr(builtins, "input", _inputs(["10.16.69.251:5051", "", "ru"]))
+    monkeypatch.setattr(builtins, "input", make_inputs(["10.16.69.251:5051", "", "ru"]))
     entry = cli.ask_http_service("stt")
     assert entry["url"] == "http://10.16.69.251:5051"
     assert entry["language"] == "ru"
@@ -132,29 +132,29 @@ def test_ask_http_service_normalizes_schemeless_url(mock_stt, monkeypatch):
 @patch("kow_setup.checks.check_tts")
 def test_ask_http_service_adds_default_port(mock_tts, monkeypatch):
     mock_tts.return_value = CheckResult(service="tts", ok=True, latency_ms=2)
-    monkeypatch.setattr(builtins, "input", _inputs(["10.16.69.251", ""]))
+    monkeypatch.setattr(builtins, "input", make_inputs(["10.16.69.251", ""]))
     entry = cli.ask_http_service("tts")
     assert entry["url"] == "http://10.16.69.251:5052"  # tts default port
 
 
 def test_suggested_host_from_ollama_answer():
     raw = {"ollama": {"mode": "remote", "url": "http://10.16.69.251:11434"}}
-    assert cli._suggested_host(raw, {}) == "10.16.69.251"
+    assert cli.suggested_host(raw, {}) == "10.16.69.251"
 
 
 def test_suggested_host_falls_back_to_current():
-    assert cli._suggested_host({}, {"OLLAMA_HOST": "http://10.0.0.5:11434"}) == "10.0.0.5"
+    assert cli.suggested_host({}, {"OLLAMA_HOST": "http://10.0.0.5:11434"}) == "10.0.0.5"
 
 
 def test_suggested_host_empty_when_unknown():
-    assert cli._suggested_host({}, {}) == ""
+    assert cli.suggested_host({}, {}) == ""
 
 
 @patch("kow_setup.checks.check_stt")
 def test_ask_http_service_suggests_ollama_host_and_port(mock_stt, monkeypatch):
     # blank URL accepts the suggested <ollama host>:<stt default port 5051>
     mock_stt.return_value = CheckResult(service="stt", ok=True, latency_ms=1)
-    monkeypatch.setattr(builtins, "input", _inputs(["", "", ""]))
+    monkeypatch.setattr(builtins, "input", make_inputs(["", "", ""]))
     entry = cli.ask_http_service("stt", default_host="10.16.69.251")
     assert entry["url"] == "http://10.16.69.251:5051"
 
@@ -178,7 +178,7 @@ def test_ask_http_service_blank_keeps_url_and_token(mock_stt, monkeypatch):
     mock_stt.return_value = CheckResult(service="stt", ok=True, latency_ms=1)
     current = {"STT_URL": "http://10.16.69.251:5099", "STT_TOKEN": "secret", "STT_LANGUAGE": "ru"}
     # blank url -> keep; blank token -> keep (not re-emitted); blank language -> keep
-    monkeypatch.setattr(builtins, "input", _inputs(["", "", ""]))
+    monkeypatch.setattr(builtins, "input", make_inputs(["", "", ""]))
     entry = cli.ask_http_service("stt", current)
     assert entry["url"] == "http://10.16.69.251:5099"
     assert entry["language"] == "ru"
@@ -195,7 +195,7 @@ def test_ask_http_service_retry_revalidates_same_url(mock_tts, monkeypatch):
         CheckResult(service="tts", ok=True, latency_ms=3),
     ]
     # url, token, decision="" (retry) -> re-probe same -> OK
-    monkeypatch.setattr(builtins, "input", _inputs(["10.16.69.251:5052", "", ""]))
+    monkeypatch.setattr(builtins, "input", make_inputs(["10.16.69.251:5052", "", ""]))
     entry = cli.ask_http_service("tts")
     assert entry["url"] == "http://10.16.69.251:5052"  # unchanged
     assert mock_tts.call_count == 2
@@ -210,7 +210,7 @@ def test_ask_http_service_fix_re_enters_settings(mock_tts, monkeypatch):
     ]
     # url1, token1, decision="f", url2, token2
     monkeypatch.setattr(
-        builtins, "input", _inputs(["10.16.69.251:5052", "", "f", "10.16.69.251:5000", ""])
+        builtins, "input", make_inputs(["10.16.69.251:5052", "", "f", "10.16.69.251:5000", ""])
     )
     entry = cli.ask_http_service("tts")
     assert entry["url"] == "http://10.16.69.251:5000"
@@ -220,20 +220,20 @@ def test_ask_http_service_fix_re_enters_settings(mock_tts, monkeypatch):
 @patch("kow_setup.checks.check_tts")
 def test_ask_http_service_skip_after_failed_check(mock_tts, monkeypatch):
     mock_tts.return_value = CheckResult(service="tts", ok=False, error="refused")
-    monkeypatch.setattr(builtins, "input", _inputs(["10.16.69.251:5052", "", "s"]))
+    monkeypatch.setattr(builtins, "input", make_inputs(["10.16.69.251:5052", "", "s"]))
     assert cli.ask_http_service("tts") == {"mode": "skip"}
 
 
 @patch("kow_setup.checks.check_tts")
 def test_ask_http_service_keep_anyway_after_failed_check(mock_tts, monkeypatch):
     mock_tts.return_value = CheckResult(service="tts", ok=False, error="refused")
-    monkeypatch.setattr(builtins, "input", _inputs(["10.16.69.251:5052", "", "a"]))
+    monkeypatch.setattr(builtins, "input", make_inputs(["10.16.69.251:5052", "", "a"]))
     entry = cli.ask_http_service("tts")
     assert entry == {"mode": "remote", "url": "http://10.16.69.251:5052"}
 
 
 def test_ask_voice_blank_keeps_current(monkeypatch):
-    monkeypatch.setattr(builtins, "input", _inputs([""]))
+    monkeypatch.setattr(builtins, "input", make_inputs([""]))
     assert cli.ask_voice({"KOW_WAKE_MODE": "both"}) == {}  # no updates -> config preserved
 
 

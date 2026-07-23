@@ -21,14 +21,14 @@ class SocketAgentSession:
     def __init__(self, socket_path: Path, conversation_id: str | None = None) -> None:
         self.socket_path = Path(socket_path)
         self.conversation_id = conversation_id
-        self._client = AgentClient(self.socket_path)
+        self.client = AgentClient(self.socket_path)
 
     async def ask(self, text: str) -> AsyncIterator[str]:
-        async for event in self._client.ask(text, self.conversation_id):
+        async for event in self.client.ask(text, self.conversation_id):
             kind = event.get("event")
             if kind == "TokenEvent":
                 yield event.get("text", "")
             elif kind == "ConfirmRequestEvent":
-                await self._client.confirm(event["request_id"], False)
+                await self.client.confirm(event["request_id"], False)
             elif kind in ("DoneEvent", "ErrorEvent"):
                 break

@@ -51,7 +51,7 @@ DEFAULTS = {
 }
 
 
-def _kowalski_conf_path() -> Path:
+def kowalski_conf_path() -> Path:
     """The kow-core config file that `kow-setup` writes (env KOW_CONFIG wins)."""
     override = os.environ.get("KOW_CONFIG")
     if override:
@@ -64,7 +64,7 @@ def _kowalski_conf_path() -> Path:
         return Path("~/.config/kowalski/kowalski.conf").expanduser()
 
 
-def _parse_conf(path: Path) -> dict[str, str]:
+def parse_conf(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     if not path.exists():
         return values
@@ -105,9 +105,9 @@ class VoiceSettings:
         values = dict(DEFAULTS)
         # kow-core's kowalski.conf (written by kow-setup) is the lowest layer
         # above the built-in defaults; the native ttsgen.conf chain overrides it.
-        values.update(_parse_conf(_kowalski_conf_path()))
+        values.update(parse_conf(kowalski_conf_path()))
         for path in CONF_CHAIN:
-            values.update(_parse_conf(path))
+            values.update(parse_conf(path))
         for key in values:
             if key in os.environ:
                 values[key] = os.environ[key]

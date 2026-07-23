@@ -78,7 +78,7 @@ class HttpSttClient:
         self.token = token
         self.timeout = timeout
 
-    def _headers(self) -> dict[str, str]:
+    def headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.token}"} if self.token else {}
 
     async def transcribe(self, utterance: Utterance, language: str | None = None) -> Transcript:
@@ -90,7 +90,7 @@ class HttpSttClient:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.post(
                 f"{self.url}/api/stt",
-                headers=self._headers(),
+                headers=self.headers(),
                 files={"file": ("audio.wav", wav, "audio/wav")},
                 data=data,
             )
@@ -106,6 +106,6 @@ class HttpSttClient:
         import httpx
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.get(f"{self.url}/api/health", headers=self._headers())
+            resp = await client.get(f"{self.url}/api/health", headers=self.headers())
             resp.raise_for_status()
             return resp.json()

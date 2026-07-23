@@ -23,7 +23,7 @@ class CheckResult:
     error: str | None = None
 
 
-def _get(url: str, token: str | None = None) -> tuple[dict, int]:
+def http_get(url: str, token: str | None = None) -> tuple[dict, int]:
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     started = time.perf_counter()
     response = requests.get(url, headers=headers, timeout=TIMEOUT)
@@ -34,7 +34,7 @@ def _get(url: str, token: str | None = None) -> tuple[dict, int]:
 
 def check_ollama(url: str) -> CheckResult:
     try:
-        payload, latency = _get(f"{url.rstrip('/')}/api/tags")
+        payload, latency = http_get(f"{url.rstrip('/')}/api/tags")
     except Exception as exc:
         return CheckResult(service="ollama", ok=False, error=str(exc))
     models = [m.get("name") for m in payload.get("models", [])]
@@ -45,7 +45,7 @@ def check_ollama(url: str) -> CheckResult:
 
 def check_stt(url: str, token: str | None = None) -> CheckResult:
     try:
-        payload, latency = _get(f"{url.rstrip('/')}/api/health", token)
+        payload, latency = http_get(f"{url.rstrip('/')}/api/health", token)
     except Exception as exc:
         return CheckResult(service="stt", ok=False, error=str(exc))
     available = payload.get("available", 0)
@@ -58,7 +58,7 @@ def check_stt(url: str, token: str | None = None) -> CheckResult:
 
 def check_tts(url: str, token: str | None = None) -> CheckResult:
     try:
-        payload, latency = _get(f"{url.rstrip('/')}/api/health", token)
+        payload, latency = http_get(f"{url.rstrip('/')}/api/health", token)
     except Exception as exc:
         return CheckResult(service="tts", ok=False, error=str(exc))
     return CheckResult(service="tts", ok=True, latency_ms=latency, detail=payload)

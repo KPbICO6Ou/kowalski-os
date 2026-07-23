@@ -34,7 +34,7 @@ class HttpTtsClient:
         self.timeout = timeout
         self.language = language
 
-    def _headers(self) -> dict[str, str]:
+    def headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.token}"} if self.token else {}
 
     async def synthesize(self, text: str) -> AudioClip:
@@ -48,7 +48,7 @@ class HttpTtsClient:
         if lang:
             body["language"] = lang
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.post(f"{self.url}/api/tts", headers=self._headers(), json=body)
+            resp = await client.post(f"{self.url}/api/tts", headers=self.headers(), json=body)
             resp.raise_for_status()
             elapsed = resp.headers.get("X-Elapsed")
             return AudioClip(
@@ -62,6 +62,6 @@ class HttpTtsClient:
         import httpx
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.get(f"{self.url}/api/health", headers=self._headers())
+            resp = await client.get(f"{self.url}/api/health", headers=self.headers())
             resp.raise_for_status()
             return resp.json()
