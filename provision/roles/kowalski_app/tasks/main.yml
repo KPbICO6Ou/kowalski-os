@@ -145,6 +145,55 @@
   changed_when: true
   when: kow_mail | bool and (kow_mail_present.rc | default(1)) != 0
 
+- name: Install the GTK build/runtime packages for the GUI windows
+  become: true
+  ansible.builtin.apt:
+    name:
+      - gir1.2-gtk-3.0
+      - libgirepository1.0-dev
+      - libcairo2-dev
+      - pkg-config
+      - python3-dev
+      - gcc
+    state: present
+  when: kow_gui | bool
+
+- name: Check whether PyGObject (gi) is present in the venv
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.command: "{{ kow_voice_venv }}/bin/python -c 'import gi'"
+  register: kow_gi_present
+  changed_when: false
+  failed_when: false
+  when: kow_gui | bool
+
+- name: Install PyGObject into the venv (kow-omni / kow-mail need it)
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.command: >-
+    "{{ kow_voice_venv }}/bin/pip" install pycairo "PyGObject<3.51"
+  changed_when: true
+  when: kow_gui | bool and (kow_gi_present.rc | default(1)) != 0
+
+- name: Ensure the applications menu directory exists
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.file:
+    path: "{{ kow_home }}/.local/share/applications"
+    state: directory
+    mode: "0755"
+  when: kow_gui | bool
+
+- name: Install the mail-window menu entry
+  become: true
+  become_user: "{{ kow_user }}"
+  ansible.builtin.copy:
+    remote_src: true
+    src: "{{ kow_prefix }}/packaging/theme/kowalski-mail.desktop"
+    dest: "{{ kow_home }}/.local/share/applications/kowalski-mail.desktop"
+    mode: "0644"
+  when: kow_gui | bool
+
 - name: Link the CLI launchers into /usr/local/bin
   become: true
   ansible.builtin.file:

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Kowalski Mail
+Comment=AI-first mail: search, read, summarize, draft replies
+Exec=kow-mail
+Icon=mail-message-new
+Terminal=false
+Categories=Network;Email;

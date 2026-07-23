@@ -92,7 +92,7 @@ Kowalski OS has one "brain" — the `kow-core` service — that every interface 
 | Part | What it is |
 |---|---|
 | `core/` | the assistant's brain: understanding requests, the tools, the safety rules, the log |
-| `ui/` | the Omnibox (press Super+Space) and desktop pieces |
+| `ui/` | the Omnibox (press Super+Space), the AI-first mail window (`kow-mail`), and desktop pieces |
 | `voice/` | wake word, speech-to-text, text-to-speech |
 | `indexer/` | semantic file search |
 | `setup/` | the first-run setup wizard |
