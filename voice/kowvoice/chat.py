@@ -19,12 +19,13 @@ import importlib.util
 import uuid
 
 from kowalski.agent.events import TokenEvent
-from kowalski.cli import _print_event, _summarize_kwargs
+from kowalski.agent.render import print_event, summarize_kwargs
 from kowalski.conversations import run_turn
 
 from .console import DIM, RESET, Work, mic_meter
 from .term_input import TALK, fmt_hotkey, hotkey_bytes, raw_read, reader_for
 from .voice_io import VoiceChatIO
+
 
 def build_chat_wake(settings):
     """An openWakeWord listener for in-chat hands-free activation, or None when
@@ -330,9 +331,9 @@ async def drive_turn(loop, text, conversation_id, conversations, config) -> str:
     """Run one agent turn: stream events to the console, return the answer text."""
     parts: list[str] = []
     async for event in run_turn(
-        loop, text, conversation_id, conversations, **_summarize_kwargs(config)
+        loop, text, conversation_id, conversations, **summarize_kwargs(config)
     ):
-        _print_event(event)
+        print_event(event)
         if isinstance(event, TokenEvent):
             parts.append(event.text)
     return "".join(parts).strip()

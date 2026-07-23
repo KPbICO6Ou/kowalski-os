@@ -8,6 +8,7 @@ import json
 import sys
 
 from . import __version__
+from .agent.render import print_event, summarize_kwargs
 from .config import Config
 
 DIM = "\033[2m"
@@ -123,6 +124,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "journal" and args.journal_command == "tail":
         return cmd_journal_tail(args)
     if args.command == "mail":
+        from .mail_cli import cmd_mail
+
         return cmd_mail(args)
     if args.command == "settings":
         from .settings_cli import cmd_settings_tui
@@ -145,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
     return 1
 
 
-def _build_runtime(confirmer, dry_run: bool = False):
+def build_runtime(confirmer, dry_run: bool = False):
     """Config -> store -> scheduler -> registry, shared by ask/serve/tools."""
     from .bootstrap import build_default_registry
     from .scheduler import ReminderScheduler
@@ -160,56 +163,6 @@ def _build_runtime(confirmer, dry_run: bool = False):
     return config, store, scheduler, registry
 
 
-def _summarize_kwargs(config) -> dict:
-    """run_turn summarisation params from config (off => never trigger)."""
-    if not config.get_bool("KOW_SUMMARIZE"):
-        return {"summarize_after": 10**9}
-    return {
-        "summarize_after": config.get_int("KOW_SUMMARIZE_AFTER"),
-        "keep": config.get_int("KOW_SUMMARIZE_KEEP"),
-    }
-
-
-def _print_event(event, json_mode: bool = False) -> bool:
-    """Render one agent event to stdout. Returns True if it was an error."""
-    from .agent.events import (
-        DoneEvent,
-        ErrorEvent,
-        PlanEvent,
-        PlanStepEvent,
-        TokenEvent,
-        ToolCallEvent,
-        ToolResultEvent,
-    )
-
-    if json_mode:
-        print(json.dumps(event.to_dict(), ensure_ascii=False), flush=True)
-        return isinstance(event, ErrorEvent)
-    if isinstance(event, PlanEvent):
-        print("Plan:")
-        for k, step in enumerate(event.steps, start=1):
-            print(f"  {k}. {step}")
-    elif isinstance(event, PlanStepEvent):
-        k, total = event.index + 1, event.total
-        if event.status == "start":
-            print(f"\n▶ step {k}/{total}: {event.description}")
-        else:
-            print(f"{DIM}✓ step {k}/{total}{RESET}")
-    elif isinstance(event, TokenEvent):
-        print(event.text, end="", flush=True)
-    elif isinstance(event, ToolCallEvent):
-        print(f"\n{DIM}→ {event.tool}({json.dumps(event.args, ensure_ascii=False)}){RESET}")
-    elif isinstance(event, ToolResultEvent):
-        status = "✓" if event.ok else "✗"
-        print(f"{DIM}{status} {event.content[:200]}{RESET}")
-    elif isinstance(event, DoneEvent):
-        print()
-    elif isinstance(event, ErrorEvent):
-        print(f"\nerror: {event.message}", file=sys.stderr)
-        return True
-    return False
-
-
 async def cmd_ask(args) -> int:
     import uuid
 
@@ -220,7 +173,7 @@ async def cmd_ask(args) -> int:
     from .policy import AutoConfirm, InteractiveCliConfirmation
 
     confirmer = AutoConfirm() if args.yes else InteractiveCliConfirmation()
-    config, store, scheduler, registry = _build_runtime(confirmer, dry_run=args.dry_run)
+    config, store, scheduler, registry = build_runtime(confirmer, dry_run=args.dry_run)
     conversations = ConversationStore(store)
 
     conversation_id = args.conversation
@@ -256,13 +209,13 @@ async def cmd_ask(args) -> int:
             context_provider=context_provider,
         )
         events = run_turn(
-            loop, args.prompt, conversation_id, conversations, **_summarize_kwargs(config)
+            loop, args.prompt, conversation_id, conversations, **summarize_kwargs(config)
         )
 
     exit_code = 0
     try:
         async for event in events:
-            if _print_event(event, json_mode=args.json):
+            if print_event(event, json_mode=args.json):
                 exit_code = 1
         if not args.json and new_conversation:
             print(
@@ -335,7 +288,7 @@ async def cmd_chat(args) -> int:
         pass
 
     confirmer = AutoConfirm() if args.yes else InteractiveCliConfirmation()
-    config, store, scheduler, registry = _build_runtime(confirmer, dry_run=args.dry_run)
+    config, store, scheduler, registry = build_runtime(confirmer, dry_run=args.dry_run)
     conversations = ConversationStore(store)
 
     conversation_id = args.conversation
@@ -382,9 +335,9 @@ async def cmd_chat(args) -> int:
                 break
             try:
                 async for event in run_turn(
-                    loop, text, conversation_id, conversations, **_summarize_kwargs(config)
+                    loop, text, conversation_id, conversations, **summarize_kwargs(config)
                 ):
-                    _print_event(event)
+                    print_event(event)
             except KeyboardInterrupt:
                 print("\n(interrupted)")
     finally:
@@ -397,7 +350,7 @@ async def cmd_chat(args) -> int:
 def cmd_tools_list(args) -> int:
     from .policy import AutoDeny
 
-    _, store, _, registry = _build_runtime(AutoDeny())
+    _, store, _, registry = build_runtime(AutoDeny())
     try:
         if args.schemas:
             print(json.dumps(registry.schemas_for_ollama(), ensure_ascii=False, indent=2))
@@ -430,57 +383,6 @@ def cmd_journal_tail(args) -> int:
     finally:
         store.close()
     return 0
-
-
-def cmd_mail(args) -> int:
-    """Direct mailbox access from the terminal (search/read/folders), using the
-    same backend as the agent's mail.* tools (KOW_MAIL_BACKEND)."""
-    from .mail import build_backend
-
-    if not getattr(args, "mail_command", None):
-        print("usage: kow mail {search|read|folders}", file=sys.stderr)
-        return 2
-    config = Config.load()
-    backend = build_backend(config)
-    if backend is None:
-        print("mail: KOW_MAIL_BACKEND=imap but the 'mail' extra isn't installed "
-              "(pip install 'kowalski[mail]').", file=sys.stderr)
-        return 2
-    return asyncio.run(_run_mail(args, backend))
-
-
-async def _run_mail(args, backend) -> int:
-    try:
-        if args.mail_command == "folders":
-            for name in await backend.list_folders():
-                print(name)
-            return 0
-        if args.mail_command == "search":
-            summaries = await backend.search(args.query, folder=args.folder, limit=args.limit)
-            if not summaries:
-                print("No messages found.")
-                return 0
-            for summary in summaries:
-                flag = "*" if summary.unread else " "
-                print(f"{flag} [{summary.id}] {summary.date}  "
-                      f"{summary.from_addr}  —  {summary.subject}")
-            return 0
-        if args.mail_command == "read":
-            message = await backend.read(args.message_id)
-            print(f"Subject: {message.subject}")
-            print(f"From: {message.from_addr}")
-            print(f"To: {', '.join(message.to)}")
-            print(f"Date: {message.date}\n")
-            print(message.body_text)
-            return 0
-    except (KeyError, LookupError) as exc:
-        print(f"Message not found: {exc}", file=sys.stderr)
-        return 1
-    except Exception as exc:  # IMAP/connection errors must not dump a traceback
-        print(f"mail error: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 1
-    print("usage: kow mail {search|read|folders}", file=sys.stderr)
-    return 2
 
 
 if __name__ == "__main__":
