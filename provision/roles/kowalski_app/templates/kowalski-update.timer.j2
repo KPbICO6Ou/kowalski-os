@@ -2,8 +2,14 @@
 Description=Kowalski OS auto-update timer (poll origin every {{ kow_autoupdate_interval }})
 
 [Timer]
-OnBootSec=1min
+# OnBootSec+OnUnitActiveSec alone go permanently dormant ("active (elapsed)",
+# Trigger: n/a) when the user manager restarts: both monotonic elapse points land
+# in the past, so the service never runs again and deploys silently stop.
+# OnStartupSec seeds the chain after every manager (re)start, and the OnCalendar
+# net re-seeds it even if the timer itself is restarted long after startup.
+OnStartupSec=30s
 OnUnitActiveSec={{ kow_autoupdate_interval }}
+OnCalendar=*:0/10
 Persistent=true
 
 [Install]
