@@ -225,6 +225,15 @@ kow-voice: openWakeWord + silero-vad локально → wachawo/speech-to-text
 ### Фаза 4 — Почта (3 недели)
 mbsync/notmuch backend, GTK-клиент, mail-tools, AI-драфты.
 **DoD:** «отправь Ивану письмо, что встреча переносится» → драфт → подтверждение → отправка.
+**Статус (сделано, кроме notmuch):** mail-tools `mail.search/read/draft/send`
+(send = DESTRUCTIVE → всегда подтверждение), бэкенды mock + IMAP/SMTP
+(imap-tools/aiosmtplib, extra `mail`), `kow mail` CLI, шаг Mail в kow-setup
+(инлайн-проба IMAP) + флаг провижининга `kow_mail`; **GTK-клиент `kow-mail`**:
+список → письмо → AI-панель (Summarize / Draft reply / Translate / свободный
+вопрос, стриминг через демона; отправка детерминированная с подтверждением),
+`--demo`-инбокс, флаг `kow_gui` ставит PyGObject-стек, пункт меню XFCE.
+Проверено на боксе end-to-end (окно + живой стриминг от qwen3:8b). Вместо
+mbsync/notmuch пока прямой IMAP-поиск — офлайн-индекс остаётся кандидатом.
 
 ### Фаза 5 — Автоматизация и vision (3–4 недели)
 Скриншот+VLM, AT-SPI/xdotool управление, YAML-рецепты, sandboxed shell. Многошаговые агентные задачи с планированием.
