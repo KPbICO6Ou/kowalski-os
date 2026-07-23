@@ -72,11 +72,14 @@ class MailWindow:
         # Left: the message list (id, date, from, subject; bold when unread)
         self.list_store = Gtk.ListStore(str, str, str, str, int)
         self.list_view = Gtk.TreeView(model=self.list_store)
-        for index, title, expand in ((1, "Date", False), (2, "From", False), (3, "Subject", True)):
+        for index, title, width, expand in ((1, "Date", 90, False), (2, "From", 150, False),
+                                            (3, "Subject", -1, True)):
             renderer = Gtk.CellRendererText()
             renderer.set_property("ellipsize", Pango.EllipsizeMode.END)
             column = Gtk.TreeViewColumn(title, renderer, text=index, weight=4)
             column.set_expand(expand)
+            if width > 0:
+                column.set_min_width(width)
             self.list_view.append_column(column)
         self.list_view.connect("cursor-changed", self.on_row_selected)
         list_scroll = Gtk.ScrolledWindow()
