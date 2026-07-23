@@ -19,6 +19,17 @@ def sound(name: str) -> Path | None:
     return None
 
 
+def load_clip(name: str):
+    """A bundled sound as a playable AudioClip, or None when it's missing —
+    cues are always optional."""
+    path = sound(name)
+    if path is None:
+        return None
+    from .types import AudioClip
+
+    return AudioClip(audio=path.read_bytes(), format="wav")
+
+
 def default_cue() -> Path:
     """The shipped listening earcon; falls back to the repo-root path if absent."""
     return sound("listen.wav") or Path(__file__).resolve().parents[2] / "sounds" / "listen.wav"

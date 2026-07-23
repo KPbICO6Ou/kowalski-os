@@ -4,25 +4,13 @@ input/output devices, so it doubles as a quick check that those are right."""
 
 from __future__ import annotations
 
-import sys
 
-DIM = "\033[2m"
-RESET = "\033[0m"
-
-
-def _meter(rms: float, state: str) -> None:
-    if not sys.stdout.isatty():
-        return
-    filled = int(min(1.0, rms * 12) * 16)
-    bar = "█" * filled + "·" * (16 - filled)
-    label = {"waiting": "speak…", "speaking": "hearing…", "ending": "…"}.get(state, "")
-    sys.stdout.write(f"\r{DIM}  🎤 [{bar}] {label}{RESET}\033[K")
-    sys.stdout.flush()
+from .console import clear_line, mic_meter, pr
 
 
 async def run_echo(settings=None) -> int:
     from .audio_devices import EnergyVadRecorder, SoundDeviceSink, _quiet_alsa
-    from .cues import sound
+    from .cues import load_clip
     from .settings import VoiceSettings
     from .types import AudioClip
 
@@ -30,12 +18,7 @@ async def run_echo(settings=None) -> int:
     recorder = EnergyVadRecorder(settings.sample_rate, settings.vad_silence_ms,
                                  device=settings.input_device, max_seconds=5.0)
     sink = SoundDeviceSink(device=settings.output_device)
-    cue_path = sound("listen.wav")
-    cue = AudioClip(audio=cue_path.read_bytes(), format="wav") if cue_path else None
-
-    def pr(s: str = "") -> None:  # col-0 line, robust to a terminal left in raw mode
-        sys.stdout.write("\r" + s + "\r\n")
-        sys.stdout.flush()
+    cue = load_clip("listen.wav")
 
     async def play(audio) -> None:
         if audio is None:
@@ -52,13 +35,11 @@ async def run_echo(settings=None) -> int:
     while True:
         await play(cue)  # "speak now"
         try:
-            utt = await recorder.record_utterance(on_level=_meter)
+            utt = await recorder.record_utterance(on_level=mic_meter)
         except Exception as exc:
             pr(f"  (recording failed: {exc})")
             return 1
-        if sys.stdout.isatty():
-            sys.stdout.write("\r\033[K")
-            sys.stdout.flush()
+        clear_line()
         if utt is None or utt.is_empty:
             pr("  (silence — speak after the cue)")
             continue

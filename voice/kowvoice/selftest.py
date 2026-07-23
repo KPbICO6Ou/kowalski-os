@@ -9,8 +9,8 @@ with the mocks in `mocks.py` (no microphone, services, or Ollama needed)."""
 
 from __future__ import annotations
 
-DIM = "\033[2m"
-RESET = "\033[0m"
+from .console import DIM, RESET
+
 CYAN = "\033[36m"   # TTS lines
 GREEN = "\033[32m"  # STT lines
 

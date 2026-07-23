@@ -7,11 +7,9 @@ each take (speech present, sane length, not silent), and saves WAVs under
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
-DIM = "\033[2m"
-RESET = "\033[0m"
+from .console import clear_line, mic_meter, pr
 
 
 def samples_dir(slug: str) -> Path:
@@ -36,26 +34,14 @@ def validate_take(utt) -> tuple[bool, str]:
     return True, f"{dur:.2f}s · rms {rms:.3f}"
 
 
-def _meter(rms: float, state: str) -> None:
-    """Live mic-level bar while a take is being recorded (tty only)."""
-    if not sys.stdout.isatty():
-        return
-    filled = int(min(1.0, rms * 12) * 16)
-    bar = "█" * filled + "·" * (16 - filled)
-    label = {"waiting": "speak…", "speaking": "hearing…", "ending": "…"}.get(state, "")
-    sys.stdout.write(f"\r{DIM}  🎤 [{bar}] {label}{RESET}\033[K")
-    sys.stdout.flush()
-
-
 async def run_record(phrase: str, *, count: int = 30, negatives: int = 12,
                      settings=None) -> int:
     from .audio_devices import EnergyVadRecorder, SoundDeviceSink, _quiet_alsa
-    from .cues import sound
+    from .cues import load_clip
     from .settings import VoiceSettings
     from .stt_http import pcm_to_wav
     from .train import slugify
     from .tts_http import HttpTtsClient
-    from .types import AudioClip
 
     settings = settings or VoiceSettings.load()
     slug = slugify(phrase)
@@ -68,15 +54,7 @@ async def run_record(phrase: str, *, count: int = 30, negatives: int = 12,
                                  device=settings.input_device, max_seconds=3.0)
     sink = SoundDeviceSink(device=settings.output_device)
 
-    def clip(name: str):
-        path = sound(name)
-        return AudioClip(audio=path.read_bytes(), format="wav") if path else None
-
-    cue, ok, nope = clip("listen.wav"), clip("bloop.wav"), clip("oops.wav")
-
-    def pr(s: str = "") -> None:  # col-0 line, robust to a terminal left in raw mode
-        sys.stdout.write("\r" + s + "\r\n")
-        sys.stdout.flush()
+    cue, ok, nope = load_clip("listen.wav"), load_clip("bloop.wav"), load_clip("oops.wav")
 
     async def play(audio) -> None:
         if audio is None:
@@ -98,10 +76,8 @@ async def run_record(phrase: str, *, count: int = 30, negatives: int = 12,
     async def capture(prompt: str, dest: Path, idx: int) -> bool:
         pr(prompt)
         await play(cue)  # the "speak now" signal
-        utt = await recorder.record_utterance(on_level=_meter)
-        if sys.stdout.isatty():
-            sys.stdout.write("\r\033[K")
-            sys.stdout.flush()
+        utt = await recorder.record_utterance(on_level=mic_meter)
+        clear_line()
         valid, info = validate_take(utt)
         if valid:
             (dest / f"{idx:03d}.wav").write_bytes(pcm_to_wav(utt.pcm, utt.sample_rate))
